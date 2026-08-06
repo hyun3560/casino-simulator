@@ -9,6 +9,10 @@
 #include "Blueprint/UserWidget.h"
 #include "casino_simulator.h"
 #include "Widgets/Input/SVirtualJoystick.h"
+#include "UI/casino_simulatorPlayerHUD.h"
+#include "casino_simulatorAttributeSet.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
 
 Acasino_simulatorPlayerController::Acasino_simulatorPlayerController()
 {
@@ -38,6 +42,103 @@ void Acasino_simulatorPlayerController::BeginPlay()
 
 		}
 
+	}
+
+	// only spawn the player HUD on local player controllers
+	if (IsLocalPlayerController() && PlayerHUDWidgetClass)
+	{
+		PlayerHUDWidget = CreateWidget<Ucasino_simulatorPlayerHUD>(this, PlayerHUDWidgetClass);
+
+		if (PlayerHUDWidget)
+		{
+			PlayerHUDWidget->AddToPlayerScreen(0);
+		}
+		else
+		{
+			UE_LOG(Logcasino_simulator, Error, TEXT("Could not spawn player HUD widget."));
+		}
+
+		// keep the HUD bound to whichever pawn we currently/next possess
+		OnPossessedPawnChanged.AddDynamic(this, &Acasino_simulatorPlayerController::HandlePossessedPawnChanged);
+
+		if (APawn* CurrentPawn = GetPawn())
+		{
+			HandlePossessedPawnChanged(nullptr, CurrentPawn);
+		}
+	}
+}
+
+void Acasino_simulatorPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	UnbindFromAbilitySystem();
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void Acasino_simulatorPlayerController::HandlePossessedPawnChanged(APawn* PreviousPawn, APawn* NewPawn)
+{
+	UnbindFromAbilitySystem();
+
+	if (const IAbilitySystemInterface* AbilitySystemInterface = Cast<IAbilitySystemInterface>(NewPawn))
+	{
+		BindToAbilitySystem(AbilitySystemInterface->GetAbilitySystemComponent());
+	}
+}
+
+void Acasino_simulatorPlayerController::BindToAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent)
+{
+	if (!AbilitySystemComponent)
+	{
+		return;
+	}
+
+	BoundAbilitySystemComponent = AbilitySystemComponent;
+
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetNicotineAttribute())
+		.AddUObject(this, &Acasino_simulatorPlayerController::OnNicotineChanged);
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetAlcoholAttribute())
+		.AddUObject(this, &Acasino_simulatorPlayerController::OnAlcoholChanged);
+
+	// push the current values immediately so the bars aren't left stale until the next change
+	if (const Ucasino_simulatorAttributeSet* Attributes = AbilitySystemComponent->GetSet<Ucasino_simulatorAttributeSet>())
+	{
+		if (PlayerHUDWidget)
+		{
+			PlayerHUDWidget->BP_NicotineUpdated(Attributes->GetNicotine(), Attributes->GetMaxNicotine());
+			PlayerHUDWidget->BP_AlcoholUpdated(Attributes->GetAlcohol(), Attributes->GetMaxAlcohol());
+		}
+	}
+}
+
+void Acasino_simulatorPlayerController::UnbindFromAbilitySystem()
+{
+	if (BoundAbilitySystemComponent)
+	{
+		BoundAbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetNicotineAttribute()).RemoveAll(this);
+		BoundAbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetAlcoholAttribute()).RemoveAll(this);
+		BoundAbilitySystemComponent = nullptr;
+	}
+}
+
+void Acasino_simulatorPlayerController::OnNicotineChanged(const FOnAttributeChangeData& Data)
+{
+	if (PlayerHUDWidget && BoundAbilitySystemComponent)
+	{
+		if (const Ucasino_simulatorAttributeSet* Attributes = BoundAbilitySystemComponent->GetSet<Ucasino_simulatorAttributeSet>())
+		{
+			PlayerHUDWidget->BP_NicotineUpdated(Data.NewValue, Attributes->GetMaxNicotine());
+		}
+	}
+}
+
+void Acasino_simulatorPlayerController::OnAlcoholChanged(const FOnAttributeChangeData& Data)
+{
+	if (PlayerHUDWidget && BoundAbilitySystemComponent)
+	{
+		if (const Ucasino_simulatorAttributeSet* Attributes = BoundAbilitySystemComponent->GetSet<Ucasino_simulatorAttributeSet>())
+		{
+			PlayerHUDWidget->BP_AlcoholUpdated(Data.NewValue, Attributes->GetMaxAlcohol());
+		}
 	}
 }
 

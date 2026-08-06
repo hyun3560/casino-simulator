@@ -8,6 +8,9 @@
 
 class UInputMappingContext;
 class UUserWidget;
+class Ucasino_simulatorPlayerHUD;
+class UAbilitySystemComponent;
+struct FOnAttributeChangeData;
 
 /**
  *  Simple first person Player Controller
@@ -46,12 +49,43 @@ protected:
 	UPROPERTY(EditAnywhere, Config, Category = "Input|Touch Controls")
 	bool bForceTouchControls = false;
 
+	/** Player HUD widget class to spawn (nicotine/alcohol meters) */
+	UPROPERTY(EditAnywhere, Category="HUD")
+	TSubclassOf<Ucasino_simulatorPlayerHUD> PlayerHUDWidgetClass;
+
+	/** Pointer to the spawned player HUD widget */
+	UPROPERTY()
+	TObjectPtr<Ucasino_simulatorPlayerHUD> PlayerHUDWidget;
+
+	/** Ability system component we're currently listening to for attribute changes, so we can unbind cleanly when the pawn changes */
+	UPROPERTY()
+	TObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
+
 	/** Gameplay initialization */
 	virtual void BeginPlay() override;
+
+	/** Unbinds from any ability system component we're still listening to */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Input mapping context setup */
 	virtual void SetupInputComponent() override;
 
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
+
+	/** Re-binds to the newly possessed pawn's ability system whenever it changes */
+	UFUNCTION()
+	void HandlePossessedPawnChanged(APawn* PreviousPawn, APawn* NewPawn);
+
+	/** Subscribes to the given ability system's Nicotine/Alcohol attribute change delegates */
+	void BindToAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent);
+
+	/** Unsubscribes from the currently bound ability system, if any */
+	void UnbindFromAbilitySystem();
+
+	/** Called whenever the possessed pawn's Nicotine attribute changes */
+	void OnNicotineChanged(const FOnAttributeChangeData& Data);
+
+	/** Called whenever the possessed pawn's Alcohol attribute changes */
+	void OnAlcoholChanged(const FOnAttributeChangeData& Data);
 };

@@ -8,6 +8,8 @@
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "AbilitySystemComponent.h"
+#include "casino_simulatorAttributeSet.h"
 #include "casino_simulator.h"
 
 Acasino_simulatorCharacter::Acasino_simulatorCharacter()
@@ -42,6 +44,67 @@ Acasino_simulatorCharacter::Acasino_simulatorCharacter()
 	// Configure character movement
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
 	GetCharacterMovement()->AirControl = 0.5f;
+
+	// Create the ability system component. Attributes/abilities/effects are replicated
+	// via the ASC itself, so the actor doesn't need to replicate it separately.
+	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
+	AbilitySystemComponent->SetIsReplicated(true);
+	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+
+	// Created as a subobject of this actor so the ASC (also owned by this actor) auto-discovers
+	// it when InitAbilityActorInfo runs.
+	AttributeSet = CreateDefaultSubobject<Ucasino_simulatorAttributeSet>(TEXT("AttributeSet"));
+}
+
+UAbilitySystemComponent* Acasino_simulatorCharacter::GetAbilitySystemComponent() const
+{
+	return AbilitySystemComponent;
+}
+
+void Acasino_simulatorCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	// Server-side init. The ASC lives on this character, so it is both owner and avatar.
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+
+		// Set starting attribute values. GameplayEffects should only ever be applied on the
+		// authority - clients pick the result up through normal attribute replication.
+		if (HasAuthority())
+		{
+			InitializeDefaultAttributes();
+		}
+	}
+}
+
+void Acasino_simulatorCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	// Client-side init, mirrors PossessedBy for clients that receive the player state after possession.
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+	}
+}
+
+void Acasino_simulatorCharacter::InitializeDefaultAttributes() const
+{
+	if (!AbilitySystemComponent || !InitialAttributesEffectClass)
+	{
+		return;
+	}
+
+	FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
+	EffectContext.AddSourceObject(this);
+
+	const FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(InitialAttributesEffectClass, 1.0f, EffectContext);
+	if (SpecHandle.IsValid())
+	{
+		AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+	}
 }
 
 void Acasino_simulatorCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
