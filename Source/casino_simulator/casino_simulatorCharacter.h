@@ -6,6 +6,7 @@
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
 #include "AbilitySystemInterface.h"
+#include "ActiveGameplayEffectHandle.h"
 #include "casino_simulatorCharacter.generated.h"
 
 class UInputComponent;
@@ -65,6 +66,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UGameplayEffect> InitialAttributesEffectClass;
 
+	/** Infinite periodic GameplayEffect (typically a Blueprint) that decays Nicotine/Alcohol over time. Applied once, server-side. */
+	UPROPERTY(EditDefaultsOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
+	TSubclassOf<UGameplayEffect> AttributeDecayEffectClass;
+
+	/** Handle to the active decay effect, kept so it can be removed/reapplied later (e.g. to pause decay) */
+	UPROPERTY(BlueprintReadOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
+	FActiveGameplayEffectHandle AttributeDecayEffectHandle;
+
+	/** Walking speed at full Nicotine (ratio = 1). CharacterMovementComponent's MaxWalkSpeed is scaled from this as Nicotine depletes. */
+	UPROPERTY(EditAnywhere, Category="Abilities", meta = (AllowPrivateAccess = "true"))
+	float MaxMoveSpeed = 600.0f;
+
 public:
 	Acasino_simulatorCharacter();
 
@@ -87,6 +100,15 @@ protected:
 
 	/** Applies InitialAttributesEffectClass to this character's own ability system. Server-only; call after InitAbilityActorInfo. */
 	void InitializeDefaultAttributes() const;
+
+	/** Applies AttributeDecayEffectClass to this character's own ability system so Nicotine/Alcohol decay over time. Server-only. */
+	void ApplyAttributeDecayEffect();
+
+	/** Subscribes UpdateMoveSpeedFromNicotine to the Nicotine/MaxNicotine attribute change delegates. Call after InitAbilityActorInfo, on every machine (not authority-only) since MaxWalkSpeed needs to match locally for movement prediction/simulation. */
+	void BindMoveSpeedToNicotine();
+
+	/** Rescales CharacterMovementComponent's MaxWalkSpeed to MaxMoveSpeed * (Nicotine / MaxNicotine). */
+	void UpdateMoveSpeedFromNicotine() const;
 
 	/** Called from Input Actions for movement input */
 	void MoveInput(const FInputActionValue& Value);

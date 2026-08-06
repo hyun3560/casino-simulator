@@ -40,6 +40,10 @@ public:
 	FGameplayAttributeData Nicotine;
 	ATTRIBUTE_ACCESSORS(Ucasino_simulatorAttributeSet, Nicotine)
 
+	UPROPERTY(BlueprintReadOnly, Category = "Nicotine", ReplicatedUsing = OnRep_NicotineDecayRate)
+	FGameplayAttributeData NicotineDecayRate;   // 초당(또는 Period당) 감쇠량. 기본 1.0
+	ATTRIBUTE_ACCESSORS(Ucasino_simulatorAttributeSet, NicotineDecayRate)
+
 	/** Maximum nicotine level */
 	UPROPERTY(BlueprintReadOnly, Category = "Nicotine", ReplicatedUsing = OnRep_MaxNicotine)
 	FGameplayAttributeData MaxNicotine;
@@ -49,6 +53,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Alcohol", ReplicatedUsing = OnRep_Alcohol)
 	FGameplayAttributeData Alcohol;
 	ATTRIBUTE_ACCESSORS(Ucasino_simulatorAttributeSet, Alcohol)
+
+	UPROPERTY(BlueprintReadOnly, Category = "Alcohol", ReplicatedUsing = OnRep_AlcoholDecayRate)
+	FGameplayAttributeData AlcoholDecayRate;
+	ATTRIBUTE_ACCESSORS(Ucasino_simulatorAttributeSet, AlcoholDecayRate)
 
 	/** Maximum alcohol level */
 	UPROPERTY(BlueprintReadOnly, Category = "Alcohol", ReplicatedUsing = OnRep_MaxAlcohol)
@@ -61,10 +69,16 @@ protected:
 	virtual void OnRep_Nicotine(const FGameplayAttributeData& OldNicotine);
 
 	UFUNCTION()
+	virtual void OnRep_NicotineDecayRate(const FGameplayAttributeData& OldNicotineRate);
+
+	UFUNCTION()
 	virtual void OnRep_MaxNicotine(const FGameplayAttributeData& OldMaxNicotine);
 
 	UFUNCTION()
 	virtual void OnRep_Alcohol(const FGameplayAttributeData& OldAlcohol);
+
+	UFUNCTION()
+	virtual void OnRep_AlcoholDecayRate(const FGameplayAttributeData& OldAlcoholDecayRate);
 
 	UFUNCTION()
 	virtual void OnRep_MaxAlcohol(const FGameplayAttributeData& OldMaxAlcohol);
