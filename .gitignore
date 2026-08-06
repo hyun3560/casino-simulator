@@ -6,6 +6,7 @@ Saved/
 
 # Visual Studio and IDE files
 .vs/
+.vs_backup_*/
 *.sln
 *.suo
 *.user
@@ -16,10 +17,12 @@ Saved/
 *.VC.opendb
 
 # Build and upgrade logs
-UpgradeLog.htm
-Backup/
+UpgradeLog*.htm
+Backup*/
+
+# Codex temporary review artifacts
+.codex_tmp_ppt_view/
 
 # OS metadata
 Thumbs.db
 Desktop.ini
-
