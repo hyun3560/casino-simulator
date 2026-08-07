@@ -9,6 +9,7 @@
 #include "InputActionValue.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "AbilitySystemComponent.h"
+#include "Economy/CasinoShopComponent.h"
 #include "casino_simulatorAttributeSet.h"
 #include "casino_simulator.h"
 
@@ -54,6 +55,8 @@ Acasino_simulatorCharacter::Acasino_simulatorCharacter()
 	// Created as a subobject of this actor so the ASC (also owned by this actor) auto-discovers
 	// it when InitAbilityActorInfo runs.
 	AttributeSet = CreateDefaultSubobject<Ucasino_simulatorAttributeSet>(TEXT("AttributeSet"));
+
+	ShopComponent = CreateDefaultSubobject<UCasinoShopComponent>(TEXT("ShopComponent"));
 }
 
 UAbilitySystemComponent* Acasino_simulatorCharacter::GetAbilitySystemComponent() const
