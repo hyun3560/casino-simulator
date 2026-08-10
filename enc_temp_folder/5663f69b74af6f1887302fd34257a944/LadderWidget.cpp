@@ -169,8 +169,10 @@ bool ULadderWidget::GetLayoutForSize(const FVector2D& Full, FVector2D& OutOrigin
 
 FVector2D ULadderWidget::GetRailTop(int32 Rail) const
 {
+	const FVector2D Cached = GetCachedGeometry().GetLocalSize();
+	const FVector2D Size = (Cached.X > 0.0f && Cached.Y > 0.0f) ? Cached : LastKnownSize;   // 평소엔 캐시, 첫 빌드 순간만 폴백
 	FVector2D Origin, DrawSize; float Dx;
-	if (!GetLayoutForSize(GetCachedGeometry().GetLocalSize(), Origin, DrawSize, Dx))
+	if (!GetLayoutForSize(Size, Origin, DrawSize, Dx))
 	{
 		return FVector2D::ZeroVector;
 	}
@@ -180,8 +182,10 @@ FVector2D ULadderWidget::GetRailTop(int32 Rail) const
 
 FVector2D ULadderWidget::GetRailBottom(int32 Rail) const
 {
+	const FVector2D Cached = GetCachedGeometry().GetLocalSize();
+	const FVector2D Size = (Cached.X > 0.0f && Cached.Y > 0.0f) ? Cached : LastKnownSize;   // 평소엔 캐시, 첫 빌드 순간만 폴백
 	FVector2D Origin, DrawSize; float Dx;
-	if (!GetLayoutForSize(GetCachedGeometry().GetLocalSize(), Origin, DrawSize, Dx))
+	if (!GetLayoutForSize(Size, Origin, DrawSize, Dx))
 	{
 		return FVector2D::ZeroVector;
 	}
@@ -249,6 +253,14 @@ void ULadderWidget::StartTrace()
 void ULadderWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	// 크기가 유효해진 첫 프레임에 딱 한 번 초기 빌드. (Construct 시점엔 크기 0이라 버튼/결과가 어긋나던 문제 해결)
+	if (!bInitialBuildDone && MyGeometry.GetLocalSize().X > 1.0f && MyGeometry.GetLocalSize().Y > 1.0f)
+	{
+		bInitialBuildDone = true;
+		LastKnownSize = MyGeometry.GetLocalSize();   // 이 순간엔 GetCachedGeometry가 아직 0일 수 있어 폴백용으로 저장
+		SetRailCount(Rails);                          // OnRailCountChanged → 버튼/결과 스폰
+	}
 
 	if (!bTracing)
 	{
