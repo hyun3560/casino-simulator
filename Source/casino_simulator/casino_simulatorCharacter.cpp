@@ -78,7 +78,13 @@ void Acasino_simulatorCharacter::PossessedBy(AController* NewController)
 		if (HasAuthority())
 		{
 			InitializeDefaultAttributes();
+			ApplyAttributeDecayEffect();
 		}
+
+		// Every machine (server and each client) needs its own local MaxWalkSpeed to match, since
+		// movement prediction/simulation runs locally - Nicotine itself replicates, so this just
+		// needs to react to it wherever it's bound.
+		BindMoveSpeedToNicotine();
 	}
 }
 
@@ -90,6 +96,7 @@ void Acasino_simulatorCharacter::OnRep_PlayerState()
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+		BindMoveSpeedToNicotine();
 	}
 }
 
@@ -108,6 +115,55 @@ void Acasino_simulatorCharacter::InitializeDefaultAttributes() const
 	{
 		AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 	}
+}
+
+void Acasino_simulatorCharacter::ApplyAttributeDecayEffect()
+{
+	if (!AbilitySystemComponent || !AttributeDecayEffectClass)
+	{
+		UE_LOG(Logcasino_simulator, Warning, TEXT("'%s' could not apply attribute decay effect: %s missing."), *GetNameSafe(this), !AbilitySystemComponent ? TEXT("AbilitySystemComponent") : TEXT("AttributeDecayEffectClass"));
+		return;
+	}
+
+	FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
+	EffectContext.AddSourceObject(this);
+
+	const FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(AttributeDecayEffectClass, 1.0f, EffectContext);
+	if (SpecHandle.IsValid())
+	{
+		AttributeDecayEffectHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+	}
+
+	UE_LOG(Logcasino_simulator, Log, TEXT("'%s' applied attribute decay effect (active: %s)."), *GetNameSafe(this), AttributeDecayEffectHandle.IsValid() ? TEXT("true") : TEXT("false"));
+}
+
+void Acasino_simulatorCharacter::BindMoveSpeedToNicotine()
+{
+	if (!AbilitySystemComponent)
+	{
+		return;
+	}
+
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetNicotineAttribute())
+		.AddLambda([this](const FOnAttributeChangeData&) { UpdateMoveSpeedFromNicotine(); });
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetMaxNicotineAttribute())
+		.AddLambda([this](const FOnAttributeChangeData&) { UpdateMoveSpeedFromNicotine(); });
+
+	// Apply immediately so movement speed matches the current ratio without waiting for the next change.
+	UpdateMoveSpeedFromNicotine();
+}
+
+void Acasino_simulatorCharacter::UpdateMoveSpeedFromNicotine() const
+{
+	if (!AttributeSet || !GetCharacterMovement())
+	{
+		return;
+	}
+
+	const float MaxNicotineValue = AttributeSet->GetMaxNicotine();
+	const float Ratio = (MaxNicotineValue > 0.0f) ? FMath::Clamp(AttributeSet->GetNicotine() / MaxNicotineValue, 0.0f, 1.0f) : 1.0f;
+
+	GetCharacterMovement()->MaxWalkSpeed = MaxMoveSpeed * Ratio;
 }
 
 void Acasino_simulatorCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

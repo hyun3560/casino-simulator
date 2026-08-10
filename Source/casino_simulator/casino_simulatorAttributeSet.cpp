@@ -6,10 +6,6 @@
 #include "Net/UnrealNetwork.h"
 
 Ucasino_simulatorAttributeSet::Ucasino_simulatorAttributeSet()
-	: Nicotine(0.0f)
-	, MaxNicotine(100.0f)
-	, Alcohol(0.0f)
-	, MaxAlcohol(100.0f)
 {
 }
 
@@ -18,8 +14,10 @@ void Ucasino_simulatorAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeP
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME_CONDITION_NOTIFY(Ucasino_simulatorAttributeSet, Nicotine, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(Ucasino_simulatorAttributeSet, NicotineDecayRate, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(Ucasino_simulatorAttributeSet, MaxNicotine, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(Ucasino_simulatorAttributeSet, Alcohol, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(Ucasino_simulatorAttributeSet, AlcoholDecayRate, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(Ucasino_simulatorAttributeSet, MaxAlcohol, COND_None, REPNOTIFY_Always);
 }
 
@@ -27,8 +25,7 @@ void Ucasino_simulatorAttributeSet::PreAttributeChange(const FGameplayAttribute&
 {
 	Super::PreAttributeChange(Attribute, NewValue);
 
-	// Clamp Current attributes to [0, Max] before the change is applied (covers ongoing/infinite
-	// GameplayEffects, which modify attributes through this path rather than PostGameplayEffectExecute).
+	// 현재 값
 	if (Attribute == GetNicotineAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.0f, MaxNicotine.GetCurrentValue());
@@ -37,6 +34,16 @@ void Ucasino_simulatorAttributeSet::PreAttributeChange(const FGameplayAttribute&
 	{
 		NewValue = FMath::Clamp(NewValue, 0.0f, MaxAlcohol.GetCurrentValue());
 	}
+	// 차감 값
+	else if (Attribute == GetNicotineDecayRateAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.0f, MaxNicotine.GetCurrentValue());
+	}
+	else if (Attribute == GetAlcoholDecayRateAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.0f, MaxAlcohol.GetCurrentValue());
+	}
+	// 최대 값
 	else if (Attribute == GetMaxNicotineAttribute())
 	{
 		AdjustAttributeForMaxChange(Nicotine, MaxNicotine, NewValue, GetNicotineAttribute());
@@ -83,6 +90,11 @@ void Ucasino_simulatorAttributeSet::OnRep_Nicotine(const FGameplayAttributeData&
 	GAMEPLAYATTRIBUTE_REPNOTIFY(Ucasino_simulatorAttributeSet, Nicotine, OldNicotine);
 }
 
+void Ucasino_simulatorAttributeSet::OnRep_NicotineDecayRate(const FGameplayAttributeData& OldNicotineRate)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(Ucasino_simulatorAttributeSet, NicotineDecayRate, OldNicotineRate);
+}
+
 void Ucasino_simulatorAttributeSet::OnRep_MaxNicotine(const FGameplayAttributeData& OldMaxNicotine)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(Ucasino_simulatorAttributeSet, MaxNicotine, OldMaxNicotine);
@@ -91,6 +103,11 @@ void Ucasino_simulatorAttributeSet::OnRep_MaxNicotine(const FGameplayAttributeDa
 void Ucasino_simulatorAttributeSet::OnRep_Alcohol(const FGameplayAttributeData& OldAlcohol)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(Ucasino_simulatorAttributeSet, Alcohol, OldAlcohol);
+}
+
+void Ucasino_simulatorAttributeSet::OnRep_AlcoholDecayRate(const FGameplayAttributeData& OldAlcoholDecayRate)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(Ucasino_simulatorAttributeSet, AlcoholDecayRate, OldAlcoholDecayRate);
 }
 
 void Ucasino_simulatorAttributeSet::OnRep_MaxAlcohol(const FGameplayAttributeData& OldMaxAlcohol)
