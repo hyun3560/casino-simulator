@@ -189,6 +189,23 @@ FVector2D ULadderWidget::GetRailBottom(int32 Rail) const
 	return FVector2D(Origin.X + Rail * Dx, Origin.Y + DrawSize.Y);       // 세로줄 맨 아래
 }
 
+float ULadderWidget::GetRailAnchorX(int32 Rail) const
+{
+	Rail = FMath::Clamp(Rail, 0, Rails - 1);
+	const float Start = (1.0f - LadderWidthRatio) * 0.5f;               // 왼쪽 여백(비율)
+	return Start + (Rail + 0.5f) / Rails * LadderWidthRatio;            // 그려지는 세로줄과 일치
+}
+
+float ULadderWidget::GetLadderTopAnchorY() const
+{
+	return (1.0f - LadderHeightRatio) * 0.5f;        // 사다리 맨 위(비율) — 버튼 앵커 Y
+}
+
+float ULadderWidget::GetLadderBottomAnchorY() const
+{
+	return 1.0f - (1.0f - LadderHeightRatio) * 0.5f; // 사다리 맨 아래(비율) — 결과 앵커 Y
+}
+
 void ULadderWidget::SetRailCount(int32 NewRails)
 {
 	Rails = FMath::Clamp(NewRails, MinRails, MaxRails);
@@ -235,6 +252,109 @@ void ULadderWidget::ClearBoard()
 	TraceProgress = 0.0f;
 }
 
+void ULadderWidget::ChangeBet(int32 Steps)
+{
+	const int32 MaxBet = FMath::Max(Balance, BetStep);   // 잔액까지만
+	BetAmount = FMath::Clamp(BetAmount + Steps * BetStep, BetStep, MaxBet);
+	OnBetChanged(BetAmount);
+}
+
+void ULadderWidget::NativeConstruct()
+{
+	Super::NativeConstruct();
+
+	// 판 초기화: 기본 줄개수(Rails, 기본 3)로 판 세팅 → 배당 빌드 + OnRailCountChanged로 선택버튼/결과칸 스폰.
+	// (BP Event Construct 의 Set Rail Count 노드를 대체함)
+	SetRailCount(Rails);
+
+	// 초기 상태를 BP로 한 번 방송 → "켜자마자 레일선택에 불" + 커서/배팅/잔액 표시 동기화.
+	// (버튼이 스폰된 뒤에 호출돼야 하이라이트가 먹으므로 SetRailCount 다음에 둠)
+	OnModeChanged(Mode);          // 시작 모드(RailSelect) 하이라이트
+	OnCursorChanged(RailCursor);  // 시작 커서 줄 하이라이트
+	OnBetChanged(BetAmount);      // 배팅액 표시
+}
+
+void ULadderWidget::SetRailCursor(int32 NewCursor)
+{
+	RailCursor = FMath::Clamp(NewCursor, 0, Rails - 1);
+	OnCursorChanged(RailCursor);   // 물리버튼/클릭 어느 쪽이든 여기로 합류 → 하이라이트 일원화
+}
+
+void ULadderWidget::ResetRound()
+{
+	ClearBoard();                       // 가로줄·트레이스 제거 → 세로줄만(판 비움)
+	Mode = ELadderMode::RailSelect;     // 조작 모드 초기화
+	OnModeChanged(Mode);                // 모드 하이라이트 갱신
+	SetRailCursor(0);                   // 커서 0번 줄로(+OnCursorChanged 발생)
+}
+
+void ULadderWidget::NavCycle()
+{
+	const uint8 Next = (static_cast<uint8>(Mode) + 1) % 4;
+	Mode = static_cast<ELadderMode>(Next);
+	OnModeChanged(Mode);
+}
+
+void ULadderWidget::NavLeft()
+{
+	switch (Mode)
+	{
+	case ELadderMode::RailSelect:
+		SetRailCursor(RailCursor - 1);                     // 왼쪽 줄로
+		break;
+	case ELadderMode::RailCount:
+		RemoveRail();                                     // 줄 하나 줄임
+		RailCursor = FMath::Clamp(RailCursor, 0, Rails - 1);
+		OnCursorChanged(RailCursor);
+		break;
+	case ELadderMode::Bet:
+		ChangeBet(-1);
+		break;
+	default:
+		break;                                            // 새로고침 모드: 좌우 없음
+	}
+}
+
+void ULadderWidget::NavRight()
+{
+	switch (Mode)
+	{
+	case ELadderMode::RailSelect:
+		SetRailCursor(RailCursor + 1);                     // 오른쪽 줄로
+		break;
+	case ELadderMode::RailCount:
+		AddRail();                                        // 줄 하나 늘림
+		RailCursor = FMath::Clamp(RailCursor, 0, Rails - 1);
+		OnCursorChanged(RailCursor);
+		break;
+	case ELadderMode::Bet:
+		ChangeBet(1);
+		break;
+	default:
+		break;
+	}
+}
+
+void ULadderWidget::NavSelect()
+{
+	switch (Mode)
+	{
+	case ELadderMode::RailSelect:
+		if (!bTracing)                                    // 트레이스 중이면 무시
+		{
+			GenerateLadder(RailCursor);                   // 커서 줄로 구슬 발사
+			StartTrace();
+		}
+		break;
+	case ELadderMode::Refresh:
+		ClearBoard();       // 판 비우기: 가로줄·트레이스 제거 → 세로줄만(버튼 누르기 전 상태)
+		ShuffleResults();   // 배당 셔플 + OnResultsChanged
+		break;
+	default:
+		break;                                            // 줄개수/배팅 모드: 선택 동작 없음
+	}
+}
+
 void ULadderWidget::StartTrace()
 {
 	// GenerateLadder 로 경로가 만들어져 있어야 함
@@ -242,6 +362,12 @@ void ULadderWidget::StartTrace()
 	{
 		return;
 	}
+
+	// 배팅액을 이번 판 스테이크로 확정하고 잔액에서 차감
+	StakedThisRound = FMath::Min(BetAmount, Balance);
+	Balance -= StakedThisRound;
+	OnBalanceChanged(Balance);
+
 	TraceProgress = 0.0f;
 	bTracing = true;
 }
@@ -262,11 +388,13 @@ void ULadderWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 		TraceProgress = 1.0f;
 		bTracing = false;
 
-		// 정산: 결과값(배당)만큼 자금에 더함. (2단계에서 BetAmount * LastPayout 로 바뀔 예정)
-		Balance += LastPayout;
+		// 정산: 건 돈 × 배당 만큼 지급 (꽝=0이면 0 → 건 돈만 잃음)
+		const int32 Winnings = StakedThisRound * LastPayout;   // 획득 금액(완제품)
+		Balance += Winnings;
 		OnBalanceChanged(Balance);
 
-		OnTraceFinished(bWin, DestRail);   // BP에서 당첨/꽝 연출, BGM 정지 등
+		// BP는 계산 없이 표시만: 당첨여부·도착줄·배율·당첨금 전부 넘김
+		OnTraceFinished(bWin, DestRail, LastPayout, Winnings);
 	}
 }
 
@@ -281,23 +409,30 @@ int32 ULadderWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Allott
 		return LayerId;
 	}
 
-	FVector2D Origin, DrawSize;
-	float dx;
-	GetLayoutForSize(AllottedGeometry.GetLocalSize(), Origin, DrawSize, dx);   // 세로줄 좌표 함수와 공용
+	const FVector2D Full = AllottedGeometry.GetLocalSize();
 
-	// 가로줄이 차지하는 세로 영역은 레일보다 위아래로 RailOverhang 만큼 안쪽
-	const float RungTop    = Origin.Y + RailOverhang;
-	const float RungHeight = FMath::Max(DrawSize.Y - RailOverhang * 2.0f, 0.0f);
+	// 사다리가 차지할 영역(비율로 축소, 가운데 정렬)
+	const float UsableW = Full.X * LadderWidthRatio;
+	const float UsableH = Full.Y * LadderHeightRatio;
+	const float OriginX = (Full.X - UsableW) * 0.5f;
+	const float OriginY = (Full.Y - UsableH) * 0.5f;
+
+	// 가로: UsableW 를 Rails 칸으로 나눠 각 칸 중앙 → 앵커(GetRailAnchorX)와 일치
+	auto RailX = [&](float r) { return OriginX + (r + 0.5f) / Rails * UsableW; };
+
+	// 가로줄 세로 영역은 레일보다 위아래로 RailOverhang 만큼 안쪽
+	const float RungTop    = OriginY + RailOverhang;
+	const float RungHeight = FMath::Max(UsableH - RailOverhang * 2.0f, 0.0f);
 	const float dy = RungHeight / (Rows - 1);     // 행 간격
 	const FPaintGeometry PaintGeo = AllottedGeometry.ToPaintGeometry();
 
 	// 세로줄 (가로줄 영역보다 위아래로 RailOverhang 만큼 더 뻗음)
 	for (int32 g = 0; g < Rails; ++g)
 	{
-		const float x = Origin.X + g * dx;
+		const float x = RailX(g);
 		TArray<FVector2D> Pts;
-		Pts.Add(FVector2D(x, Origin.Y));
-		Pts.Add(FVector2D(x, Origin.Y + DrawSize.Y));
+		Pts.Add(FVector2D(x, OriginY));
+		Pts.Add(FVector2D(x, OriginY + UsableH));
 		FSlateDrawElement::MakeLines(OutDrawElements, LayerId, PaintGeo, Pts,
 			ESlateDrawEffect::None, LineColor, true, LineThickness * 0.7f);
 	}
@@ -310,8 +445,8 @@ int32 ULadderWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Allott
 		{
 			if (!DrawRung[r][g]) continue;
 			TArray<FVector2D> Pts;
-			Pts.Add(FVector2D(Origin.X + g * dx, y));
-			Pts.Add(FVector2D(Origin.X + (g + 1) * dx, y));
+			Pts.Add(FVector2D(RailX(g), y));
+			Pts.Add(FVector2D(RailX(g + 1), y));
 			FSlateDrawElement::MakeLines(OutDrawElements, LayerId, PaintGeo, Pts,
 				ESlateDrawEffect::None, LineColor, true, LineThickness);
 		}
@@ -320,19 +455,18 @@ int32 ULadderWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Allott
 	// ── 실제 경로 트레이스(빨강) + 구슬 ──
 	if (PathRails.Num() >= 2 && TraceProgress > 0.0f)
 	{
-		auto RailX = [&](int32 Rail) { return Origin.X + Rail * dx; };
-		auto RowY  = [&](int32 Row)  { return RungTop + Row * dy; };
+		auto RowY = [&](int32 Row) { return RungTop + Row * dy; };
 
 		// 픽셀 경로 폴리라인: 맨 위 → (내려가고 옆으로 건너기 반복) → 맨 아래
 		TArray<FVector2D> Poly;
-		Poly.Add(FVector2D(RailX(PathRails[0]), Origin.Y));
+		Poly.Add(FVector2D(RailX(PathRails[0]), OriginY));
 		for (int32 k = 0; k < CrossRowsSaved.Num(); ++k)
 		{
 			const float cy = RowY(CrossRowsSaved[k]);
 			Poly.Add(FVector2D(RailX(PathRails[k]),     cy));   // 현재 줄로 내려옴
 			Poly.Add(FVector2D(RailX(PathRails[k + 1]), cy));   // 옆 줄로 건넘
 		}
-		Poly.Add(FVector2D(RailX(PathRails.Last()), Origin.Y + DrawSize.Y));
+		Poly.Add(FVector2D(RailX(PathRails.Last()), OriginY + UsableH));
 
 		// 총 길이
 		float Total = 0.0f;

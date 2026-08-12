@@ -6,6 +6,16 @@
 #include "Blueprint/UserWidget.h"
 #include "LadderWidget.generated.h"
 
+/** 전환 버튼으로 순환하는 조작 모드 */
+UENUM(BlueprintType)
+enum class ELadderMode : uint8
+{
+	RailSelect  UMETA(DisplayName = "레일선택"),
+	RailCount   UMETA(DisplayName = "줄개수"),
+	Bet         UMETA(DisplayName = "배팅"),
+	Refresh     UMETA(DisplayName = "새로고침"),
+};
+
 /**
  *  사다리타기(위장 사다리 포함) 위젯.
  *  - GenerateLadder(StartRail) 로 시작 줄을 넣으면 도착 줄이 정해지고 사다리가 생성된다.
@@ -53,6 +63,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder")
 	float RailOverhang = 24.0f;
 
+	/** 사다리 가로 크기 비율(0~1). 1=위젯 폭 꽉, 0.6=가운데 60%만. 줄이려면 이 값을 낮춰. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder", meta = (ClampMin = "0.1", ClampMax = "1.0"))
+	float LadderWidthRatio = 1.0f;
+
+	/** 사다리 세로 크기 비율(0~1). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder", meta = (ClampMin = "0.1", ClampMax = "1.0"))
+	float LadderHeightRatio = 1.0f;
+
 	/** 사다리 픽셀 크기 강제 지정. (0,0)이면 위젯(=캔버스 슬롯) 크기를 그대로 채운다.
 	 *  캔버스 패널 슬롯 크기로 조절하려면 반드시 (0,0)으로 둘 것. 값이 있으면 그 크기로 가운데 정렬. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder")
@@ -97,6 +115,18 @@ public:
 	/** 세로줄 Rail 의 맨 아래 지점(로컬). 이 아래쪽에 결과 칸을 놓으면 됨. */
 	UFUNCTION(BlueprintCallable, Category = "Ladder")
 	FVector2D GetRailBottom(int32 Rail) const;
+
+	/** 세로줄 Rail 의 가로 앵커 비율(0~1). BP에서 Canvas Slot Anchor.X 로 쓰면 크기·타이밍 상관없이 정렬됨. */
+	UFUNCTION(BlueprintPure, Category = "Ladder")
+	float GetRailAnchorX(int32 Rail) const;
+
+	/** 사다리 맨 위 앵커 비율(0~1). 버튼 앵커 Y 로 쓰면 세로 축소해도 줄 위에 맞춰짐. */
+	UFUNCTION(BlueprintPure, Category = "Ladder")
+	float GetLadderTopAnchorY() const;
+
+	/** 사다리 맨 아래 앵커 비율(0~1). 결과 앵커 Y 로. */
+	UFUNCTION(BlueprintPure, Category = "Ladder")
+	float GetLadderBottomAnchorY() const;
 
 	/** 생성 결과 (읽기 전용) */
 	UPROPERTY(BlueprintReadOnly, Category = "Ladder")
@@ -144,9 +174,67 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ladder|Money")
 	int32 Balance = 1000;
 
+	/** 이번 판 배팅액. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder|Money")
+	int32 BetAmount = 100;
+
+	/** 배팅액 +/- 단위. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder|Money")
+	int32 BetStep = 100;
+
+	/** 배팅액을 Steps*BetStep 만큼 변경(최소 BetStep, 최대 잔액). OnBetChanged 발생. */
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Money")
+	void ChangeBet(int32 Steps);
+
 	/** 자금이 바뀌면 호출 — BP에서 잔액 표시 갱신. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Ladder|Money")
 	void OnBalanceChanged(int32 NewBalance);
+
+	/** 배팅액이 바뀌면 호출 — BP에서 배팅액 표시 갱신. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Ladder|Money")
+	void OnBetChanged(int32 NewBet);
+
+	// ── 조작 내비게이션 (물리 버튼 5개 중 4개: 전환/왼/오/선택) ──
+
+	/** 현재 조작 모드 */
+	UPROPERTY(BlueprintReadOnly, Category = "Ladder|Nav")
+	ELadderMode Mode = ELadderMode::RailSelect;
+
+	/** 레일선택 모드에서 지금 가리키는 줄(커서) */
+	UPROPERTY(BlueprintReadOnly, Category = "Ladder|Nav")
+	int32 RailCursor = 0;
+
+	/** 레일 커서를 특정 줄로 직접 설정(클램프). 물리버튼/버튼클릭 공용 진입점. OnCursorChanged 발생. */
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav")
+	void SetRailCursor(int32 NewCursor);
+
+	/** 새 판 초기화(결과창 닫을 때 호출). 판 비우기 + 모드=레일선택 + 커서 0 으로 리셋. */
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav")
+	void ResetRound();
+
+	/** 전환 버튼: 모드 순환 (레일선택→줄개수→배팅→새로고침→…). */
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav")
+	void NavCycle();
+
+	/** 왼쪽 버튼: 현재 모드에서 왼쪽/감소. */
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav")
+	void NavLeft();
+
+	/** 오른쪽 버튼: 현재 모드에서 오른쪽/증가. */
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav")
+	void NavRight();
+
+	/** 선택(가운데) 버튼: 레일선택=발사, 새로고침=셔플. */
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav")
+	void NavSelect();
+
+	/** 모드가 바뀌면 호출 — BP에서 현재 모드 하이라이트 표시. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Ladder|Nav")
+	void OnModeChanged(ELadderMode NewMode);
+
+	/** 레일 커서가 바뀌면 호출 — BP에서 선택 줄 하이라이트. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Ladder|Nav")
+	void OnCursorChanged(int32 RailIndex);
 
 	// ── 실제 경로 트레이스(구슬 이동) 연출 ──
 
@@ -178,11 +266,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Ladder")
 	bool IsTracing() const { return bTracing; }
 
-	/** 트레이스가 끝나면 호출(당첨/꽝 연출, BGM 정지 등). */
+	/** 트레이스가 끝나면 호출(당첨/꽝 연출, BGM 정지 등).
+	 *  결과 위젯이 계산 없이 바로 쓰도록 배율·당첨금까지 완제품으로 넘김.
+	 *  InMultiplier = 배율(LastPayout, 0=꽝), InWinnings = 획득 금액(건 돈 × 배율, 0=꽝). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Ladder")
-	void OnTraceFinished(bool bDidWin, int32 InDestRail);
+	void OnTraceFinished(bool bDidWin, int32 InDestRail, int32 InMultiplier, int32 InWinnings);
 
 protected:
+	/** 위젯 생성 시 초기 UI 상태 동기화(시작 모드 하이라이트/커서/배팅/잔액 등을 BP로 1회 방송). */
+	virtual void NativeConstruct() override;
+
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
 		const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId,
 		const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
@@ -200,6 +293,9 @@ private:
 	/** 트레이스 상태 */
 	bool  bTracing = false;
 	float TraceProgress = 0.0f;   // 0..1
+
+	/** 이번 판에 실제로 건 금액(StartTrace 때 확정, 정산에 사용). */
+	int32 StakedThisRound = 0;
 
 	/** BasePayouts 에서 Rails 개수만큼 Payouts 구성 + 셔플. SetRailCount 시 호출. */
 	void BuildPayouts();
