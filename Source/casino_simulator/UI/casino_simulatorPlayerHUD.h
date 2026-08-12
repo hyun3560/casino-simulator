@@ -23,7 +23,21 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category="HUD", meta = (DisplayName = "Nicotine Updated"))
 	void BP_NicotineUpdated(float CurrentValue, float MaxValue);
 
+	UFUNCTION(BlueprintImplementableEvent, Category = "HUD", meta = (DisplayName = "Nicotine Count"))
+	void BP_Slot_1Count(int Value);
+
 	/** Passes control to Blueprint to update the alcohol progress bar */
 	UFUNCTION(BlueprintImplementableEvent, Category="HUD", meta = (DisplayName = "Alcohol Updated"))
 	void BP_AlcoholUpdated(float CurrentValue, float MaxValue);
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "HUD", meta = (DisplayName = "Alcohol Count"))
+	void BP_Slot_2Count(int Value);
+
+	/** Passes control to Blueprint to update the currency text */
+	UFUNCTION(BlueprintImplementableEvent, Category="HUD", meta = (DisplayName = "Currency Updated"))
+	void BP_CurrencyUpdated(float NewValue);
+	UFUNCTION(BlueprintImplementableEvent, Category = "HUD", meta = (DisplayName = "Open Interection"))
+	void BP_OpenInterection();
+	UFUNCTION(BlueprintImplementableEvent, Category = "HUD", meta = (DisplayName = "Close Interection"))
+	void BP_CloseInterection();
 };

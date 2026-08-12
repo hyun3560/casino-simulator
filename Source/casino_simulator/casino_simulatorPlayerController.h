@@ -67,6 +67,10 @@ protected:
 	/** Unbinds from any ability system component we're still listening to */
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+	/** Re-checks/rebinds once PlayerState actually replicates in — handles the case where it's
+	 *  still null at BeginPlay on remote clients */
+	virtual void OnRep_PlayerState() override;
+
 	/** Input mapping context setup */
 	virtual void SetupInputComponent() override;
 
@@ -76,6 +80,17 @@ protected:
 	/** Re-binds to the newly possessed pawn's ability system whenever it changes */
 	UFUNCTION()
 	void HandlePossessedPawnChanged(APawn* PreviousPawn, APawn* NewPawn);
+
+	/** (Re)binds to the given PlayerState's OnInventoryChanged and immediately refreshes the HUD slots */
+	void BindToPlayerState(class Acasino_simulatorPlayerState* NewPlayerState);
+
+	/** Pushes current NumberSlots item counts into the HUD; safe to call anytime (handles null PlayerState/HUD/short NumberSlots) */
+	UFUNCTION()
+	void RefreshInventorySlotCounts();
+
+	/** PlayerState we're currently subscribed to, so we can unbind cleanly when it changes */
+	UPROPERTY()
+	TObjectPtr<class Acasino_simulatorPlayerState> BoundPlayerState;
 
 	/** Subscribes to the given ability system's Nicotine/Alcohol attribute change delegates */
 	void BindToAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent);
@@ -88,4 +103,12 @@ protected:
 
 	/** Called whenever the possessed pawn's Alcohol attribute changes */
 	void OnAlcoholChanged(const FOnAttributeChangeData& Data);
+
+	/** Called whenever the possessed pawn's Currency attribute changes */
+	void OnCurrencyChanged(const FOnAttributeChangeData& Data);
+
+public:
+	void OpenInteraction();
+
+	void CloseInteraction();
 };

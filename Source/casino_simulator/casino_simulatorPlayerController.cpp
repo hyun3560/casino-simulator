@@ -10,6 +10,7 @@
 #include "casino_simulator.h"
 #include "Widgets/Input/SVirtualJoystick.h"
 #include "UI/casino_simulatorPlayerHUD.h"
+#include "casino_simulatorPlayerState.h"
 #include "casino_simulatorAttributeSet.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
@@ -51,7 +52,9 @@ void Acasino_simulatorPlayerController::BeginPlay()
 
 		if (PlayerHUDWidget)
 		{
-			PlayerHUDWidget->AddToPlayerScreen(0);
+			PlayerHUDWidget->AddToPlayerScreen(100);
+
+			BindToPlayerState(GetPlayerState<Acasino_simulatorPlayerState>());
 		}
 		else
 		{
@@ -71,8 +74,61 @@ void Acasino_simulatorPlayerController::BeginPlay()
 void Acasino_simulatorPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UnbindFromAbilitySystem();
+	BindToPlayerState(nullptr);
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void Acasino_simulatorPlayerController::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	// PlayerState may have been null at BeginPlay on remote clients; this fires once it actually arrives.
+	if (PlayerHUDWidget)
+	{
+		BindToPlayerState(GetPlayerState<Acasino_simulatorPlayerState>());
+	}
+}
+
+void Acasino_simulatorPlayerController::BindToPlayerState(Acasino_simulatorPlayerState* NewPlayerState)
+{
+	if (BoundPlayerState == NewPlayerState)
+	{
+		return;
+	}
+
+	if (BoundPlayerState)
+	{
+		BoundPlayerState->OnInventoryChanged.RemoveDynamic(this, &Acasino_simulatorPlayerController::RefreshInventorySlotCounts);
+	}
+
+	BoundPlayerState = NewPlayerState;
+
+	if (BoundPlayerState)
+	{
+		BoundPlayerState->OnInventoryChanged.AddDynamic(this, &Acasino_simulatorPlayerController::RefreshInventorySlotCounts);
+	}
+
+	RefreshInventorySlotCounts();
+}
+
+void Acasino_simulatorPlayerController::RefreshInventorySlotCounts()
+{
+	if (!PlayerHUDWidget)
+	{
+		return;
+	}
+
+	if (BoundPlayerState && BoundPlayerState->NumberSlots.Num() >= 2)
+	{
+		PlayerHUDWidget->BP_Slot_1Count(BoundPlayerState->GetItemQuantity(BoundPlayerState->NumberSlots[0]));
+		PlayerHUDWidget->BP_Slot_2Count(BoundPlayerState->GetItemQuantity(BoundPlayerState->NumberSlots[1]));
+	}
+	else
+	{
+		PlayerHUDWidget->BP_Slot_1Count(0);
+		PlayerHUDWidget->BP_Slot_2Count(0);
+	}
 }
 
 void Acasino_simulatorPlayerController::HandlePossessedPawnChanged(APawn* PreviousPawn, APawn* NewPawn)
@@ -98,14 +154,17 @@ void Acasino_simulatorPlayerController::BindToAbilitySystem(UAbilitySystemCompon
 		.AddUObject(this, &Acasino_simulatorPlayerController::OnNicotineChanged);
 	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetAlcoholAttribute())
 		.AddUObject(this, &Acasino_simulatorPlayerController::OnAlcoholChanged);
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetCurrencyAttribute())
+		.AddUObject(this, &Acasino_simulatorPlayerController::OnCurrencyChanged);
 
-	// push the current values immediately so the bars aren't left stale until the next change
+	// push the current values immediately so the bars/text aren't left stale until the next change
 	if (const Ucasino_simulatorAttributeSet* Attributes = AbilitySystemComponent->GetSet<Ucasino_simulatorAttributeSet>())
 	{
 		if (PlayerHUDWidget)
 		{
 			PlayerHUDWidget->BP_NicotineUpdated(Attributes->GetNicotine(), Attributes->GetMaxNicotine());
 			PlayerHUDWidget->BP_AlcoholUpdated(Attributes->GetAlcohol(), Attributes->GetMaxAlcohol());
+			PlayerHUDWidget->BP_CurrencyUpdated(Attributes->GetCurrency());
 		}
 	}
 }
@@ -116,6 +175,7 @@ void Acasino_simulatorPlayerController::UnbindFromAbilitySystem()
 	{
 		BoundAbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetNicotineAttribute()).RemoveAll(this);
 		BoundAbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetAlcoholAttribute()).RemoveAll(this);
+		BoundAbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetCurrencyAttribute()).RemoveAll(this);
 		BoundAbilitySystemComponent = nullptr;
 	}
 }
@@ -140,6 +200,24 @@ void Acasino_simulatorPlayerController::OnAlcoholChanged(const FOnAttributeChang
 			PlayerHUDWidget->BP_AlcoholUpdated(Data.NewValue, Attributes->GetMaxAlcohol());
 		}
 	}
+}
+
+void Acasino_simulatorPlayerController::OnCurrencyChanged(const FOnAttributeChangeData& Data)
+{
+	if (PlayerHUDWidget)
+	{
+		PlayerHUDWidget->BP_CurrencyUpdated(Data.NewValue);
+	}
+}
+
+void Acasino_simulatorPlayerController::OpenInteraction()
+{
+	PlayerHUDWidget->BP_OpenInterection();
+}
+
+void Acasino_simulatorPlayerController::CloseInteraction()
+{
+	PlayerHUDWidget->BP_CloseInterection();
 }
 
 void Acasino_simulatorPlayerController::SetupInputComponent()
