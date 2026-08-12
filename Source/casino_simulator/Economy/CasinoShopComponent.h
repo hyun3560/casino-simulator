@@ -4,9 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Engine/DataTable.h"
 #include "CasinoShopComponent.generated.h"
 
 class UGameplayEffect;
+class UTexture2D;
 
 UENUM(BlueprintType)
 enum class ECasinoShopItemCategory : uint8
@@ -24,7 +26,7 @@ enum class ECasinoShopRecoveryType : uint8
 };
 
 USTRUCT(BlueprintType)
-struct FCasinoShopItemData
+struct FCasinoShopItemData : public FTableRowBase
 {
 	GENERATED_BODY()
 
@@ -36,6 +38,9 @@ struct FCasinoShopItemData
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Casino|Shop")
 	ECasinoShopItemCategory Category = ECasinoShopItemCategory::Cigarette;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Casino|Shop")
+	TObjectPtr<UTexture2D> Icon = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Casino|Shop", meta=(ClampMin="1"))
 	int32 BasePrice = 100;
@@ -100,6 +105,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Casino|Shop")
 	float GetCurrentPriceMultiplier() const;
 
+	UFUNCTION(BlueprintCallable, Category="Casino|Shop")
+	void ReloadShopItems();
+
 	UPROPERTY(BlueprintAssignable, Category="Casino|Shop")
 	FOnShopPurchaseCompleted OnPurchaseCompleted;
 
@@ -107,6 +115,9 @@ public:
 	FOnShopPurchaseFailed OnPurchaseFailed;
 
 protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Casino|Shop|Items")
+	TObjectPtr<UDataTable> ShopItemDataTable;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Casino|Shop|Items")
 	TArray<FCasinoShopItemData> ShopItems;
 
@@ -119,6 +130,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Casino|Shop|Prototype")
 	bool bAllowFreePurchasesUntilEconomyExists = true;
 
+	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 private:
@@ -139,5 +151,7 @@ private:
 	bool ValidateQuantity(int32 Quantity, FString& OutReason) const;
 	int32 GetScaledPrice(int32 BasePrice) const;
 	const FCasinoShopItemData* FindShopItem(FName ItemId) const;
+	void BuildDefaultShopItems();
+	bool LoadShopItemsFromDataTable();
 	void FailPurchase(const FString& Reason);
 };

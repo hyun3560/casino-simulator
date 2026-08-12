@@ -4,6 +4,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
+#include "Engine/DataTable.h"
 #include "GameplayEffect.h"
 #include "Net/UnrealNetwork.h"
 #include "casino_simulatorAttributeSet.h"
@@ -13,6 +14,18 @@ UCasinoShopComponent::UCasinoShopComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
 
+	BuildDefaultShopItems();
+}
+
+void UCasinoShopComponent::BeginPlay()
+{
+	Super::BeginPlay();
+
+	ReloadShopItems();
+}
+
+void UCasinoShopComponent::BuildDefaultShopItems()
+{
 	FCasinoShopItemData CheapCigarette;
 	CheapCigarette.ItemId = TEXT("CheapCigarette");
 	CheapCigarette.DisplayName = FText::FromString(TEXT("Cheap Cigarette"));
@@ -20,7 +33,7 @@ UCasinoShopComponent::UCasinoShopComponent()
 	CheapCigarette.BasePrice = 100;
 	CheapCigarette.RecoveryType = ECasinoShopRecoveryType::Nicotine;
 	CheapCigarette.RestoreAmount = 15.0f;
-	CheapCigarette.Description = FText::FromString(TEXT("Restores a small amount of nicotine."));
+	CheapCigarette.Description = FText::FromString(TEXT("카지노 뒷문 근처에서만 유통된다는 소문이 있다. 피우면 니코틴은 차지만 자존감은 조금 깎인다."));
 
 	FCasinoShopItemData RegularCigarette;
 	RegularCigarette.ItemId = TEXT("RegularCigarette");
@@ -29,7 +42,7 @@ UCasinoShopComponent::UCasinoShopComponent()
 	RegularCigarette.BasePrice = 180;
 	RegularCigarette.RecoveryType = ECasinoShopRecoveryType::Nicotine;
 	RegularCigarette.RestoreAmount = 30.0f;
-	RegularCigarette.Description = FText::FromString(TEXT("Restores a moderate amount of nicotine."));
+	RegularCigarette.Description = FText::FromString(TEXT("도박왕이 즐겨 피던 담배. 황금 필터가 둘러져 있고, 가끔 이빨에 금이 낀다는 컴플레인이 걸려온다."));
 
 	FCasinoShopItemData Beer;
 	Beer.ItemId = TEXT("Beer");
@@ -38,7 +51,7 @@ UCasinoShopComponent::UCasinoShopComponent()
 	Beer.BasePrice = 150;
 	Beer.RecoveryType = ECasinoShopRecoveryType::Alcohol;
 	Beer.RestoreAmount = 15.0f;
-	Beer.Description = FText::FromString(TEXT("Restores a small amount of alcohol."));
+	Beer.Description = FText::FromString(TEXT("거품이 많은 맥주. 사장은 프리미엄이라고 우기지만 컵 아래쪽에서는 편의점 냄새가 난다."));
 
 	FCasinoShopItemData Whiskey;
 	Whiskey.ItemId = TEXT("Whiskey");
@@ -47,7 +60,7 @@ UCasinoShopComponent::UCasinoShopComponent()
 	Whiskey.BasePrice = 300;
 	Whiskey.RecoveryType = ECasinoShopRecoveryType::Alcohol;
 	Whiskey.RestoreAmount = 35.0f;
-	Whiskey.Description = FText::FromString(TEXT("Restores a large amount of alcohol."));
+	Whiskey.Description = FText::FromString(TEXT("칩을 잃은 사람들이 마지막으로 고르는 위스키. 한 잔 마시면 판단력은 흐려지고 자신감은 매우 선명해진다."));
 
 	ShopItems = { CheapCigarette, RegularCigarette, Beer, Whiskey };
 }
@@ -129,6 +142,14 @@ float UCasinoShopComponent::GetCurrentPriceMultiplier() const
 {
 	const int32 DayIndex = FMath::Max(CurrentDay - 1, 0);
 	return 1.0f + (PriceIncreasePerDay * DayIndex);
+}
+
+void UCasinoShopComponent::ReloadShopItems()
+{
+	if (!LoadShopItemsFromDataTable())
+	{
+		BuildDefaultShopItems();
+	}
 }
 
 void UCasinoShopComponent::ServerBuyShopItem_Implementation(FName ItemId, int32 Quantity)
@@ -301,6 +322,36 @@ const FCasinoShopItemData* UCasinoShopComponent::FindShopItem(FName ItemId) cons
 	{
 		return Item.ItemId == ItemId;
 	});
+}
+
+bool UCasinoShopComponent::LoadShopItemsFromDataTable()
+{
+	if (!ShopItemDataTable)
+	{
+		return false;
+	}
+
+	ShopItems.Empty();
+
+	const TMap<FName, uint8*>& RowMap = ShopItemDataTable->GetRowMap();
+	for (const TPair<FName, uint8*>& RowPair : RowMap)
+	{
+		const FCasinoShopItemData* Row = reinterpret_cast<const FCasinoShopItemData*>(RowPair.Value);
+		if (!Row)
+		{
+			continue;
+		}
+
+		FCasinoShopItemData Item = *Row;
+		if (Item.ItemId.IsNone())
+		{
+			Item.ItemId = RowPair.Key;
+		}
+
+		ShopItems.Add(Item);
+	}
+
+	return !ShopItems.IsEmpty();
 }
 
 void UCasinoShopComponent::FailPurchase(const FString& Reason)
