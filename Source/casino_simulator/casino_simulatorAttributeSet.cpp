@@ -13,6 +13,7 @@ void Ucasino_simulatorAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeP
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
+	DOREPLIFETIME_CONDITION_NOTIFY(Ucasino_simulatorAttributeSet, Currency, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(Ucasino_simulatorAttributeSet, Nicotine, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(Ucasino_simulatorAttributeSet, NicotineDecayRate, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(Ucasino_simulatorAttributeSet, MaxNicotine, COND_None, REPNOTIFY_Always);
@@ -83,6 +84,11 @@ void Ucasino_simulatorAttributeSet::AdjustAttributeForMaxChange(FGameplayAttribu
 
 		AbilityComp->ApplyModToAttributeUnsafe(AffectedAttributeProperty, EGameplayModOp::Additive, NewDelta);
 	}
+}
+
+void Ucasino_simulatorAttributeSet::OnRep_Currency(const FGameplayAttributeData& OldCurrency)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(Ucasino_simulatorAttributeSet, Currency, OldCurrency);
 }
 
 void Ucasino_simulatorAttributeSet::OnRep_Nicotine(const FGameplayAttributeData& OldNicotine)

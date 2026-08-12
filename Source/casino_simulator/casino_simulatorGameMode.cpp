@@ -1,8 +1,9 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "casino_simulatorGameMode.h"
+#include "casino_simulatorPlayerState.h"
 
 Acasino_simulatorGameMode::Acasino_simulatorGameMode()
 {
-	// stub
+	PlayerStateClass = Acasino_simulatorPlayerState::StaticClass();
 }
