@@ -45,6 +45,9 @@ struct FCasinoShopItemData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Casino|Shop", meta=(ClampMin="1"))
 	int32 BasePrice = 100;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Casino|Shop|Inventory")
+	int32 InventoryItemID = INDEX_NONE;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Casino|Shop")
 	ECasinoShopRecoveryType RecoveryType = ECasinoShopRecoveryType::None;
 
@@ -56,6 +59,9 @@ struct FCasinoShopItemData : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Casino|Shop")
 	TArray<TSubclassOf<UGameplayEffect>> BonusEffectClasses;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Casino|Shop")
+	bool bApplyEffectsOnPurchase = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Casino|Shop", meta=(MultiLine="true"))
 	FText Description;
@@ -145,6 +151,9 @@ private:
 
 	bool ProcessPurchase(FName ItemId, int32 Quantity);
 	bool TrySpendForPurchase(int32 Price);
+	void RefundPurchase(int32 Price);
+	bool CanGrantPurchasedItems(const FCasinoShopItemData& Item, FString& OutReason) const;
+	bool GrantPurchasedItems(const FCasinoShopItemData& Item, int32 Quantity);
 	bool ApplyItemEffects(const FCasinoShopItemData& Item, int32 Quantity);
 	bool ApplyGameplayEffect(TSubclassOf<UGameplayEffect> EffectClass, float Level);
 	bool ApplyFallbackAttributeRecovery(const FCasinoShopItemData& Item, float TotalRecovery);

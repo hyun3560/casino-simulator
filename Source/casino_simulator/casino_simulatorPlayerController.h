@@ -10,6 +10,7 @@ class UInputMappingContext;
 class UUserWidget;
 class Ucasino_simulatorPlayerHUD;
 class UAbilitySystemComponent;
+class ANPC_Base;
 struct FOnAttributeChangeData;
 
 /**
@@ -92,6 +93,9 @@ protected:
 	UPROPERTY()
 	TObjectPtr<class Acasino_simulatorPlayerState> BoundPlayerState;
 
+	UPROPERTY()
+	TObjectPtr<ANPC_Base> CurrentInteractionTarget;
+
 	/** Subscribes to the given ability system's Nicotine/Alcohol attribute change delegates */
 	void BindToAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent);
 
@@ -108,6 +112,15 @@ protected:
 	void OnCurrencyChanged(const FOnAttributeChangeData& Data);
 
 public:
+	UFUNCTION(BlueprintCallable, Category="Interaction")
+	void SetInteractionTarget(ANPC_Base* NewInteractionTarget);
+
+	UFUNCTION(BlueprintCallable, Category="Interaction")
+	void ClearInteractionTarget(ANPC_Base* InteractionTargetToClear);
+
+	UFUNCTION(BlueprintCallable, Category="Interaction")
+	void InteractWithCurrentTarget();
+
 	void OpenInteraction();
 
 	void CloseInteraction();

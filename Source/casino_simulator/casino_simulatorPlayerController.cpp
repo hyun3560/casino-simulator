@@ -12,8 +12,10 @@
 #include "UI/casino_simulatorPlayerHUD.h"
 #include "casino_simulatorPlayerState.h"
 #include "casino_simulatorAttributeSet.h"
+#include "casino_simulatorCharacter.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
+#include "NPC/NPC_Base.h"
 
 Acasino_simulatorPlayerController::Acasino_simulatorPlayerController()
 {
@@ -210,14 +212,58 @@ void Acasino_simulatorPlayerController::OnCurrencyChanged(const FOnAttributeChan
 	}
 }
 
+void Acasino_simulatorPlayerController::SetInteractionTarget(ANPC_Base* NewInteractionTarget)
+{
+	if (!NewInteractionTarget)
+	{
+		return;
+	}
+
+	CurrentInteractionTarget = NewInteractionTarget;
+	OpenInteraction();
+}
+
+void Acasino_simulatorPlayerController::ClearInteractionTarget(ANPC_Base* InteractionTargetToClear)
+{
+	if (InteractionTargetToClear && CurrentInteractionTarget != InteractionTargetToClear)
+	{
+		return;
+	}
+
+	CurrentInteractionTarget = nullptr;
+	CloseInteraction();
+}
+
+void Acasino_simulatorPlayerController::InteractWithCurrentTarget()
+{
+	if (!CurrentInteractionTarget)
+	{
+		return;
+	}
+
+	Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(GetPawn());
+	if (!PlayerCharacter)
+	{
+		return;
+	}
+
+	CurrentInteractionTarget->Interact(PlayerCharacter);
+}
+
 void Acasino_simulatorPlayerController::OpenInteraction()
 {
-	PlayerHUDWidget->BP_OpenInterection();
+	if (PlayerHUDWidget)
+	{
+		PlayerHUDWidget->BP_OpenInterection();
+	}
 }
 
 void Acasino_simulatorPlayerController::CloseInteraction()
 {
-	PlayerHUDWidget->BP_CloseInterection();
+	if (PlayerHUDWidget)
+	{
+		PlayerHUDWidget->BP_CloseInterection();
+	}
 }
 
 void Acasino_simulatorPlayerController::SetupInputComponent()

@@ -26,6 +26,16 @@ void ANPC_Base::BeginPlay()
 	}
 }
 
+void ANPC_Base::Interact(Acasino_simulatorCharacter* InteractingCharacter)
+{
+	if (!InteractingCharacter)
+	{
+		return;
+	}
+
+	BP_OnInteract(InteractingCharacter);
+}
+
 void ANPC_Base::OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	// Only the player character (Acasino_simulatorCharacter) opens the interaction - other NPCs/objects overlapping the sphere are ignored.
@@ -33,7 +43,7 @@ void ANPC_Base::OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedC
 	{
 		if (Acasino_simulatorPlayerController* PlayerController = Cast<Acasino_simulatorPlayerController>(PlayerCharacter->GetController()))
 		{
-			PlayerController->OpenInteraction();
+			PlayerController->SetInteractionTarget(this);
 		}
 	}
 }
@@ -44,7 +54,7 @@ void ANPC_Base::OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedCom
 	{
 		if (Acasino_simulatorPlayerController* PlayerController = Cast<Acasino_simulatorPlayerController>(PlayerCharacter->GetController()))
 		{
-			PlayerController->CloseInteraction();
+			PlayerController->ClearInteractionTarget(this);
 		}
 	}
 }
