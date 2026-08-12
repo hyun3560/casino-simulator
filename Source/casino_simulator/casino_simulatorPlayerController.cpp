@@ -50,19 +50,6 @@ void Acasino_simulatorPlayerController::BeginPlay()
 	// only spawn the player HUD on local player controllers
 	if (IsLocalPlayerController() && PlayerHUDWidgetClass)
 	{
-		PlayerHUDWidget = CreateWidget<Ucasino_simulatorPlayerHUD>(this, PlayerHUDWidgetClass);
-
-		if (PlayerHUDWidget)
-		{
-			PlayerHUDWidget->AddToPlayerScreen(100);
-
-			BindToPlayerState(GetPlayerState<Acasino_simulatorPlayerState>());
-		}
-		else
-		{
-			UE_LOG(Logcasino_simulator, Error, TEXT("Could not spawn player HUD widget."));
-		}
-
 		// keep the HUD bound to whichever pawn we currently/next possess
 		OnPossessedPawnChanged.AddDynamic(this, &Acasino_simulatorPlayerController::HandlePossessedPawnChanged);
 
@@ -70,6 +57,10 @@ void Acasino_simulatorPlayerController::BeginPlay()
 		{
 			HandlePossessedPawnChanged(nullptr, CurrentPawn);
 		}
+
+		// PlayerState is already valid here on the server/listen host; on a remote client it may
+		// still be null, in which case OnRep_PlayerState retries this once it replicates in.
+		TryInitializePlayerHUD();
 	}
 }
 
@@ -89,6 +80,41 @@ void Acasino_simulatorPlayerController::OnRep_PlayerState()
 	if (PlayerHUDWidget)
 	{
 		BindToPlayerState(GetPlayerState<Acasino_simulatorPlayerState>());
+	}
+	else
+	{
+		TryInitializePlayerHUD();
+	}
+}
+
+void Acasino_simulatorPlayerController::TryInitializePlayerHUD()
+{
+	if (PlayerHUDWidget || !PlayerHUDWidgetClass)
+	{
+		return;
+	}
+
+	Acasino_simulatorPlayerState* CurrentPlayerState = GetPlayerState<Acasino_simulatorPlayerState>();
+	if (!CurrentPlayerState)
+	{
+		return;
+	}
+
+	PlayerHUDWidget = CreateWidget<Ucasino_simulatorPlayerHUD>(this, PlayerHUDWidgetClass);
+
+	if (PlayerHUDWidget)
+	{
+		PlayerHUDWidget->AddToPlayerScreen(100);
+
+		BindToPlayerState(CurrentPlayerState);
+
+		// The pawn/ability system may already have been bound (e.g. from BeginPlay) before the HUD
+		// existed to receive them; push current values now instead of waiting for the next change.
+		PushInitialAttributeValues();
+	}
+	else
+	{
+		UE_LOG(Logcasino_simulator, Error, TEXT("Could not spawn player HUD widget."));
 	}
 }
 
@@ -160,14 +186,21 @@ void Acasino_simulatorPlayerController::BindToAbilitySystem(UAbilitySystemCompon
 		.AddUObject(this, &Acasino_simulatorPlayerController::OnCurrencyChanged);
 
 	// push the current values immediately so the bars/text aren't left stale until the next change
-	if (const Ucasino_simulatorAttributeSet* Attributes = AbilitySystemComponent->GetSet<Ucasino_simulatorAttributeSet>())
+	PushInitialAttributeValues();
+}
+
+void Acasino_simulatorPlayerController::PushInitialAttributeValues()
+{
+	if (!PlayerHUDWidget || !BoundAbilitySystemComponent)
 	{
-		if (PlayerHUDWidget)
-		{
-			PlayerHUDWidget->BP_NicotineUpdated(Attributes->GetNicotine(), Attributes->GetMaxNicotine());
-			PlayerHUDWidget->BP_AlcoholUpdated(Attributes->GetAlcohol(), Attributes->GetMaxAlcohol());
-			PlayerHUDWidget->BP_CurrencyUpdated(Attributes->GetCurrency());
-		}
+		return;
+	}
+
+	if (const Ucasino_simulatorAttributeSet* Attributes = BoundAbilitySystemComponent->GetSet<Ucasino_simulatorAttributeSet>())
+	{
+		PlayerHUDWidget->BP_NicotineUpdated(Attributes->GetNicotine(), Attributes->GetMaxNicotine());
+		PlayerHUDWidget->BP_AlcoholUpdated(Attributes->GetAlcohol(), Attributes->GetMaxAlcohol());
+		PlayerHUDWidget->BP_CurrencyUpdated(Attributes->GetCurrency());
 	}
 }
 
@@ -252,6 +285,10 @@ void Acasino_simulatorPlayerController::InteractWithCurrentTarget()
 
 void Acasino_simulatorPlayerController::OpenInteraction()
 {
+
+	// PlayerHUDWidget may still be null here: its creation now waits on PlayerState replicating in
+	// (see TryInitializePlayerHUD), so there's a brief window on remote clients where it doesn't exist yet.
+
 	if (PlayerHUDWidget)
 	{
 		PlayerHUDWidget->BP_OpenInterection();

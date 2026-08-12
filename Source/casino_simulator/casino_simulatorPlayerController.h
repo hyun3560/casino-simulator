@@ -82,6 +82,15 @@ protected:
 	UFUNCTION()
 	void HandlePossessedPawnChanged(APawn* PreviousPawn, APawn* NewPawn);
 
+	/**
+	 * Creates and adds PlayerHUDWidget once the PlayerState has actually replicated in, then binds
+	 * to it. No-ops if the HUD already exists or PlayerState isn't valid yet (e.g. still null on a
+	 * remote client at BeginPlay) - safe to call from both BeginPlay and OnRep_PlayerState.
+	 * Deliberately creating the widget only once PlayerState is ready means Blueprint (Construct)
+	 * can read PlayerState immediately instead of racing its replication.
+	 */
+	void TryInitializePlayerHUD();
+
 	/** (Re)binds to the given PlayerState's OnInventoryChanged and immediately refreshes the HUD slots */
 	void BindToPlayerState(class Acasino_simulatorPlayerState* NewPlayerState);
 
@@ -101,6 +110,9 @@ protected:
 
 	/** Unsubscribes from the currently bound ability system, if any */
 	void UnbindFromAbilitySystem();
+
+	/** Pushes the bound ability system's current Nicotine/Alcohol/Currency values into the HUD; safe to call anytime (no-ops if either isn't ready yet) */
+	void PushInitialAttributeValues();
 
 	/** Called whenever the possessed pawn's Nicotine attribute changes */
 	void OnNicotineChanged(const FOnAttributeChangeData& Data);
