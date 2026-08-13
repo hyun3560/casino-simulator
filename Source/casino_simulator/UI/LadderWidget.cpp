@@ -252,11 +252,17 @@ void ULadderWidget::ClearBoard()
 	TraceProgress = 0.0f;
 }
 
+void ULadderWidget::ClampBet()
+{
+	const int32 MaxBet = FMath::Max(Balance, BetStep);   // 잔액까지만 (최소 BetStep)
+	BetAmount = FMath::Clamp(BetAmount, BetStep, MaxBet);
+	OnBetChanged(BetAmount);                              // 표시 갱신
+}
+
 void ULadderWidget::ChangeBet(int32 Steps)
 {
-	const int32 MaxBet = FMath::Max(Balance, BetStep);   // 잔액까지만
-	BetAmount = FMath::Clamp(BetAmount + Steps * BetStep, BetStep, MaxBet);
-	OnBetChanged(BetAmount);
+	BetAmount += Steps * BetStep;   // 단위만큼 이동
+	ClampBet();                     // 잔액 기준 클램프 + OnBetChanged
 }
 
 void ULadderWidget::NativeConstruct()
@@ -286,6 +292,7 @@ void ULadderWidget::ResetRound()
 	Mode = ELadderMode::RailSelect;     // 조작 모드 초기화
 	OnModeChanged(Mode);                // 모드 하이라이트 갱신
 	SetRailCursor(0);                   // 커서 0번 줄로(+OnCursorChanged 발생)
+	ClampBet();                         // 잔액 줄었으면 배팅액도 맞춰 내리고 텍스트 갱신
 }
 
 void ULadderWidget::NavCycle()
@@ -342,8 +349,15 @@ void ULadderWidget::NavSelect()
 	case ELadderMode::RailSelect:
 		if (!bTracing)                                    // 트레이스 중이면 무시
 		{
-			GenerateLadder(RailCursor);                   // 커서 줄로 구슬 발사
-			StartTrace();
+			if (Balance >= BetAmount)                     // 잔액 충분 → 시작
+			{
+				GenerateLadder(RailCursor);               // 커서 줄로 구슬 발사
+				StartTrace();
+			}
+			else
+			{
+				OnInsufficientFunds();                    // 잔액 부족 → 시작 안 하고 BP 피드백
+			}
 		}
 		break;
 	case ELadderMode::Refresh:

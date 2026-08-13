@@ -186,6 +186,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Ladder|Money")
 	void ChangeBet(int32 Steps);
 
+	/** 배팅액을 현재 잔액 기준으로 재클램프(최소 BetStep, 최대 잔액) + OnBetChanged 발생.
+	 *  잔액이 바뀐 뒤(정산/새 판) 배팅액·표시를 잔액에 맞추는 용도. */
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Money")
+	void ClampBet();
+
+	/** 잔액이 배팅액보다 적어서 시작 못 할 때 호출 — BP에서 "잔액 부족" 일시 연출(깜빡/사운드). */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Ladder|Money")
+	void OnInsufficientFunds();
+
 	/** 자금이 바뀌면 호출 — BP에서 잔액 표시 갱신. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Ladder|Money")
 	void OnBalanceChanged(int32 NewBalance);
