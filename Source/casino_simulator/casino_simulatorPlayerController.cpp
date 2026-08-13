@@ -12,8 +12,11 @@
 #include "UI/casino_simulatorPlayerHUD.h"
 #include "casino_simulatorPlayerState.h"
 #include "casino_simulatorAttributeSet.h"
+#include "casino_simulatorCharacter.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "NPC/NPC_Base.h"
 
 Acasino_simulatorPlayerController::Acasino_simulatorPlayerController()
 {
@@ -243,10 +246,190 @@ void Acasino_simulatorPlayerController::OnCurrencyChanged(const FOnAttributeChan
 	}
 }
 
+void Acasino_simulatorPlayerController::SetInteractionTarget(ANPC_Base* NewInteractionTarget)
+{
+	if (!NewInteractionTarget)
+	{
+		return;
+	}
+
+	CurrentInteractionTarget = NewInteractionTarget;
+	OpenInteraction();
+}
+
+void Acasino_simulatorPlayerController::ClearInteractionTarget(ANPC_Base* InteractionTargetToClear)
+{
+	if (InteractionTargetToClear && CurrentInteractionTarget != InteractionTargetToClear)
+	{
+		return;
+	}
+
+	CurrentInteractionTarget = nullptr;
+	CloseInteraction();
+}
+
+void Acasino_simulatorPlayerController::InteractWithCurrentTarget()
+{
+	if (!CurrentInteractionTarget || bInteractionUIOpen)
+	{
+		return;
+	}
+
+	Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(GetPawn());
+	if (!PlayerCharacter)
+	{
+		return;
+	}
+
+	CurrentInteractionTarget->Interact(PlayerCharacter);
+}
+
+void Acasino_simulatorPlayerController::SetInteractionPromptSuppressed(bool bSuppressed)
+{
+	if (bInteractionPromptSuppressed == bSuppressed)
+	{
+		return;
+	}
+
+	bInteractionPromptSuppressed = bSuppressed;
+
+	if (bInteractionPromptSuppressed)
+	{
+		CloseInteraction();
+		return;
+	}
+
+	if (CurrentInteractionTarget && !bInteractionUIOpen)
+	{
+		OpenInteraction();
+	}
+}
+
+void Acasino_simulatorPlayerController::EnterInteractionUIMode(AActor* CameraTarget, float BlendTime)
+{
+	if (bInteractionUIOpen)
+	{
+		return;
+	}
+
+	bInteractionUIOpen = true;
+	CloseInteraction();
+
+	bShowMouseCursor = true;
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	InputMode.SetHideCursorDuringCapture(false);
+	SetInputMode(InputMode);
+
+	SetIgnoreMoveInput(true);
+	SetIgnoreLookInput(true);
+	SetLocalPawnMeshesHiddenForInteraction(true);
+
+	if (CameraTarget)
+	{
+		SetViewTargetWithBlend(CameraTarget, BlendTime);
+	}
+}
+
+void Acasino_simulatorPlayerController::ExitInteractionUIMode(float BlendTime)
+{
+	if (!bInteractionUIOpen)
+	{
+		return;
+	}
+
+	bInteractionUIOpen = false;
+
+	bShowMouseCursor = false;
+
+	FInputModeGameOnly InputMode;
+	SetInputMode(InputMode);
+
+	SetIgnoreMoveInput(false);
+	SetIgnoreLookInput(false);
+
+	if (APawn* ControlledPawn = GetPawn())
+	{
+		SetViewTargetWithBlend(ControlledPawn, BlendTime);
+	}
+
+	SetLocalPawnMeshesHiddenForInteraction(false);
+
+	if (CurrentInteractionTarget)
+	{
+		OpenInteraction();
+	}
+}
+
+void Acasino_simulatorPlayerController::SetLocalPawnMeshesHiddenForInteraction(bool bShouldHide)
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(GetPawn());
+	if (!PlayerCharacter)
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* FirstPersonMesh = PlayerCharacter->GetFirstPersonMesh();
+	USkeletalMeshComponent* WorldMesh = PlayerCharacter->GetMesh();
+
+	if (bShouldHide)
+	{
+		if (bInteractionPawnMeshesHidden)
+		{
+			return;
+		}
+
+		bPreviousFirstPersonMeshVisibility = FirstPersonMesh ? FirstPersonMesh->IsVisible() : true;
+		bPreviousWorldMeshVisibility = WorldMesh ? WorldMesh->IsVisible() : true;
+
+		if (FirstPersonMesh)
+		{
+			FirstPersonMesh->SetVisibility(false, true);
+		}
+
+		if (WorldMesh)
+		{
+			WorldMesh->SetVisibility(false, true);
+		}
+
+		bInteractionPawnMeshesHidden = true;
+		return;
+	}
+
+	if (!bInteractionPawnMeshesHidden)
+	{
+		return;
+	}
+
+	if (FirstPersonMesh)
+	{
+		FirstPersonMesh->SetVisibility(bPreviousFirstPersonMeshVisibility, true);
+	}
+
+	if (WorldMesh)
+	{
+		WorldMesh->SetVisibility(bPreviousWorldMeshVisibility, true);
+	}
+
+	bInteractionPawnMeshesHidden = false;
+}
+
 void Acasino_simulatorPlayerController::OpenInteraction()
 {
+	if (bInteractionUIOpen || bInteractionPromptSuppressed)
+	{
+		return;
+	}
+
 	// PlayerHUDWidget may still be null here: its creation now waits on PlayerState replicating in
 	// (see TryInitializePlayerHUD), so there's a brief window on remote clients where it doesn't exist yet.
+
 	if (PlayerHUDWidget)
 	{
 		PlayerHUDWidget->BP_OpenInterection();

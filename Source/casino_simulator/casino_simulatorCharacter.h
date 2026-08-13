@@ -15,6 +15,7 @@ class UCameraComponent;
 class UInputAction;
 class UAbilitySystemComponent;
 class Ucasino_simulatorAttributeSet;
+class UCasinoShopComponent;
 class UGameplayEffect;
 struct FInputActionValue;
 
@@ -42,6 +43,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	UInputAction* JumpAction;
 
+	/** Interact Input Action */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	UInputAction* InteractAction;
+
 	/** Move Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	UInputAction* MoveAction;
@@ -65,6 +70,10 @@ protected:
 	/** GameplayEffect (typically a Blueprint) applied once, server-side, to set starting Nicotine/Alcohol values */
 	UPROPERTY(EditDefaultsOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UGameplayEffect> InitialAttributesEffectClass;
+
+	/** Handles cigarette/alcohol shop purchases and forwards successful recovery to GAS */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Shop", meta = (AllowPrivateAccess = "true"))
+	UCasinoShopComponent* ShopComponent;
 
 	/** Infinite periodic GameplayEffect (typically a Blueprint) that decays Nicotine/Alcohol over time. Applied once, server-side. */
 	UPROPERTY(EditDefaultsOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
@@ -91,6 +100,10 @@ public:
 
 	/** Returns the attribute set holding nicotine/alcohol levels **/
 	Ucasino_simulatorAttributeSet* GetAttributeSet() const { return AttributeSet; }
+
+	/** Returns the shop component used by shop/exchange UI blueprints **/
+	UFUNCTION(BlueprintPure, Category="Shop")
+	UCasinoShopComponent* GetShopComponent() const { return ShopComponent; }
 
 protected:
 
@@ -125,6 +138,9 @@ protected:
 
 	/** Called from Input Actions for looking input */
 	void LookInput(const FInputActionValue& Value);
+
+	/** Called from Input Actions for interaction input */
+	void InteractInput(const FInputActionValue& Value);
 
 	/** Handles aim inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")

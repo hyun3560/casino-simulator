@@ -7,6 +7,7 @@
 
 Ucasino_simulatorAttributeSet::Ucasino_simulatorAttributeSet()
 {
+	InitCurrency(10000.0f);
 }
 
 void Ucasino_simulatorAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

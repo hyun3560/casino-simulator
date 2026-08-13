@@ -10,6 +10,7 @@ class UInputMappingContext;
 class UUserWidget;
 class Ucasino_simulatorPlayerHUD;
 class UAbilitySystemComponent;
+class ANPC_Base;
 struct FOnAttributeChangeData;
 
 /**
@@ -101,6 +102,22 @@ protected:
 	UPROPERTY()
 	TObjectPtr<class Acasino_simulatorPlayerState> BoundPlayerState;
 
+	UPROPERTY()
+	TObjectPtr<ANPC_Base> CurrentInteractionTarget;
+
+	/** True while an interaction UI (shop/dialogue/exchange, etc.) owns input. */
+	UPROPERTY(BlueprintReadOnly, Category="Interaction", meta=(AllowPrivateAccess="true"))
+	bool bInteractionUIOpen = false;
+
+	UPROPERTY(BlueprintReadOnly, Category="Interaction", meta=(AllowPrivateAccess="true"))
+	bool bInteractionPromptSuppressed = false;
+
+	bool bInteractionPawnMeshesHidden = false;
+
+	bool bPreviousFirstPersonMeshVisibility = true;
+
+	bool bPreviousWorldMeshVisibility = true;
+
 	/** Subscribes to the given ability system's Nicotine/Alcohol attribute change delegates */
 	void BindToAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent);
 
@@ -119,7 +136,34 @@ protected:
 	/** Called whenever the possessed pawn's Currency attribute changes */
 	void OnCurrencyChanged(const FOnAttributeChangeData& Data);
 
+	/** Hides/restores only this local player's pawn meshes while an interaction camera is active. */
+	void SetLocalPawnMeshesHiddenForInteraction(bool bShouldHide);
+
 public:
+	UFUNCTION(BlueprintCallable, Category="Interaction")
+	void SetInteractionTarget(ANPC_Base* NewInteractionTarget);
+
+	UFUNCTION(BlueprintCallable, Category="Interaction")
+	void ClearInteractionTarget(ANPC_Base* InteractionTargetToClear);
+
+	UFUNCTION(BlueprintCallable, Category="Interaction")
+	void InteractWithCurrentTarget();
+
+	UFUNCTION(BlueprintPure, Category="Interaction")
+	bool IsInteractionUIOpen() const { return bInteractionUIOpen; }
+
+	UFUNCTION(BlueprintCallable, Category="Interaction")
+	void SetInteractionPromptSuppressed(bool bSuppressed);
+
+	UFUNCTION(BlueprintPure, Category="Interaction")
+	bool IsInteractionPromptSuppressed() const { return bInteractionPromptSuppressed; }
+
+	UFUNCTION(BlueprintCallable, Category="Interaction")
+	void EnterInteractionUIMode(AActor* CameraTarget, float BlendTime = 0.35f);
+
+	UFUNCTION(BlueprintCallable, Category="Interaction")
+	void ExitInteractionUIMode(float BlendTime = 0.25f);
+
 	void OpenInteraction();
 
 	void CloseInteraction();
