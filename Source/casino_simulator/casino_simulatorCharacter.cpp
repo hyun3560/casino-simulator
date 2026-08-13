@@ -9,6 +9,7 @@
 #include "InputActionValue.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "AbilitySystemComponent.h"
+#include "casino_simulatorPlayerController.h"
 #include "casino_simulatorAttributeSet.h"
 #include "casino_simulator.h"
 
@@ -78,10 +79,11 @@ void Acasino_simulatorCharacter::PossessedBy(AController* NewController)
 			ApplyAttributeDecayEffect();
 		}
 
-		// Every machine (server and each client) needs its own local MaxWalkSpeed to match, since
-		// movement prediction/simulation runs locally - Nicotine itself replicates, so this just
-		// needs to react to it wherever it's bound.
+		// Every machine (server and each client) needs its own local MaxWalkSpeed/JumpZVelocity to
+		// match, since movement prediction/simulation runs locally - Nicotine/Alcohol themselves
+		// replicate, so this just needs to react to them wherever it's bound.
 		BindMoveSpeedToNicotine();
+		BindJumpSpeedToAlcohol();
 	}
 }
 
@@ -94,6 +96,7 @@ void Acasino_simulatorCharacter::OnRep_PlayerState()
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
 		BindMoveSpeedToNicotine();
+		BindJumpSpeedToAlcohol();
 	}
 }
 
@@ -163,6 +166,35 @@ void Acasino_simulatorCharacter::UpdateMoveSpeedFromNicotine() const
 	GetCharacterMovement()->MaxWalkSpeed = MaxMoveSpeed * Ratio;
 }
 
+void Acasino_simulatorCharacter::BindJumpSpeedToAlcohol()
+{
+	if (!AbilitySystemComponent)
+	{
+		return;
+	}
+
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetAlcoholAttribute())
+		.AddLambda([this](const FOnAttributeChangeData&) { UpdateJumpSpeedFromAlcohol(); });
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetMaxAlcoholAttribute())
+		.AddLambda([this](const FOnAttributeChangeData&) { UpdateJumpSpeedFromAlcohol(); });
+
+	// Apply immediately so jump speed matches the current ratio without waiting for the next change.
+	UpdateJumpSpeedFromAlcohol();
+}
+
+void Acasino_simulatorCharacter::UpdateJumpSpeedFromAlcohol() const
+{
+	if (!AttributeSet || !GetCharacterMovement())
+	{
+		return;
+	}
+
+	const float MaxAlcoholValue = AttributeSet->GetMaxAlcohol();
+	const float Ratio = (MaxAlcoholValue > 0.0f) ? FMath::Clamp(AttributeSet->GetAlcohol() / MaxAlcoholValue, 0.0f, 1.0f) : 1.0f;
+
+	GetCharacterMovement()->JumpZVelocity = MaxJumpSpeed * Ratio;
+}
+
 void Acasino_simulatorCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {	
 	// Set up action bindings
@@ -198,6 +230,13 @@ void Acasino_simulatorCharacter::MoveInput(const FInputActionValue& Value)
 
 void Acasino_simulatorCharacter::LookInput(const FInputActionValue& Value)
 {
+	if (Acasino_simulatorPlayerController* PC = Cast<Acasino_simulatorPlayerController>(GetController()))
+	{
+		if (PC->bShowMouseCursor == true)
+		{
+			return;
+		}
+	}
 	// get the Vector2D look axis
 	FVector2D LookAxisVector = Value.Get<FVector2D>();
 

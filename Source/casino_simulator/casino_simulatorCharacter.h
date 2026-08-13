@@ -78,6 +78,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Abilities", meta = (AllowPrivateAccess = "true"))
 	float MaxMoveSpeed = 600.0f;
 
+	/** Jump launch speed at full Alcohol (ratio = 1). CharacterMovementComponent's JumpZVelocity is scaled from this as Alcohol depletes. */
+	UPROPERTY(EditAnywhere, Category="Abilities", meta = (AllowPrivateAccess = "true"))
+	float MaxJumpSpeed = 420.0f;
+
 public:
 	Acasino_simulatorCharacter();
 
@@ -109,6 +113,12 @@ protected:
 
 	/** Rescales CharacterMovementComponent's MaxWalkSpeed to MaxMoveSpeed * (Nicotine / MaxNicotine). */
 	void UpdateMoveSpeedFromNicotine() const;
+
+	/** Subscribes UpdateJumpSpeedFromAlcohol to the Alcohol/MaxAlcohol attribute change delegates. Call after InitAbilityActorInfo, on every machine (not authority-only) since JumpZVelocity needs to match locally for movement prediction/simulation. */
+	void BindJumpSpeedToAlcohol();
+
+	/** Rescales CharacterMovementComponent's JumpZVelocity to MaxJumpSpeed * (Alcohol / MaxAlcohol). */
+	void UpdateJumpSpeedFromAlcohol() const;
 
 	/** Called from Input Actions for movement input */
 	void MoveInput(const FInputActionValue& Value);

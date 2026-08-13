@@ -36,6 +36,10 @@ public:
 	//~ End UAttributeSet interface
 
 	/** Current nicotine level */
+	UPROPERTY(BlueprintReadOnly, Category = "Currency", ReplicatedUsing = OnRep_Currency)
+	FGameplayAttributeData Currency;
+	ATTRIBUTE_ACCESSORS(Ucasino_simulatorAttributeSet, Currency)
+
 	UPROPERTY(BlueprintReadOnly, Category = "Nicotine", ReplicatedUsing = OnRep_Nicotine)
 	FGameplayAttributeData Nicotine;
 	ATTRIBUTE_ACCESSORS(Ucasino_simulatorAttributeSet, Nicotine)
@@ -65,6 +69,8 @@ public:
 
 protected:
 
+	UFUNCTION()
+	virtual void OnRep_Currency(const FGameplayAttributeData& OldCurrency);
 	UFUNCTION()
 	virtual void OnRep_Nicotine(const FGameplayAttributeData& OldNicotine);
 
