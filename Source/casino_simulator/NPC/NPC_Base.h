@@ -1,0 +1,119 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Character.h"
+#include "Engine/HitResult.h"
+#include "AbilitySystemInterface.h"
+#include "GameplayAbilitySpecHandle.h"
+#include "NPC_Base.generated.h"
+
+class USphereComponent;
+class UCameraComponent;
+class UPrimitiveComponent;
+class Acasino_simulatorCharacter;
+class UAbilitySystemComponent;
+class Ucasino_simulatorAttributeSet;
+class UAnimMontage;
+class UGameplayAbility;
+
+/**
+ *  Base class for all NPCs. ACharacter with its own AbilitySystemComponent/AttributeSet (the
+ *  NPC is both owner and avatar - there's no PlayerState to host the ASC) and a sphere
+ *  collision for interaction/detection use.
+ */
+UCLASS(abstract)
+class CASINO_SIMULATOR_API ANPC_Base : public ACharacter, public IAbilitySystemInterface
+{
+	GENERATED_BODY()
+
+	/** Sphere collision used for interaction/detection (e.g. player walking into range). Attached to the capsule root. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	USphereComponent* InteractionSphere;
+
+	/** Camera used by default while this NPC owns an interaction UI. Adjust it per NPC Blueprint. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	UCameraComponent* InteractionCameraComponent;
+
+	/** Optional external view actor override. Leave empty to use this NPC's InteractionCameraComponent. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category="Interaction|Camera", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<AActor> InteractionCameraTarget;
+
+protected:
+
+	/** Ability system component driving this NPC's abilities/attributes/effects */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
+	UAbilitySystemComponent* AbilitySystemComponent;
+
+	/** Attribute set holding this NPC's attributes (currency, nicotine/alcohol, etc.) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
+	Ucasino_simulatorAttributeSet* AttributeSet;
+
+	/** Abilities (typically Blueprints) granted to this NPC's ASC once, server-side, on BeginPlay */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
+	TArray<TSubclassOf<UGameplayAbility>> StartupAbilities;
+
+	/** Handles for every ability granted so far (startup + runtime), kept so they can be looked up/removed later */
+	UPROPERTY(BlueprintReadOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
+	TArray<FGameplayAbilitySpecHandle> GrantedAbilityHandles;
+
+	/** Played when a minigame this NPC hosts/joins (e.g. the dice game) starts */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation|Game", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UAnimMontage> GameStartMontage;
+
+	/** Played while the minigame is actively being played (e.g. a rolling/dealing loop) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation|Game", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UAnimMontage> GamePlayMontage;
+
+	/** Played once the minigame ends (win/lose/wrap-up reaction) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation|Game", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UAnimMontage> GameEndMontage;
+
+public:
+
+	ANPC_Base();
+
+	/** Returns the interaction/detection sphere component **/
+	USphereComponent* GetInteractionSphere() const { return InteractionSphere; }
+
+	/** Returns the camera component used by this NPC's interaction view **/
+	UCameraComponent* GetInteractionCameraComponent() const { return InteractionCameraComponent; }
+
+	UFUNCTION(BlueprintPure, Category="Interaction|Camera")
+	AActor* GetInteractionCameraTarget() const;
+
+	UFUNCTION(BlueprintCallable, Category="Interaction")
+	virtual void Interact(Acasino_simulatorCharacter* InteractingCharacter);
+
+	//~ Begin IAbilitySystemInterface
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	//~ End IAbilitySystemInterface
+
+	/** Returns the attribute set holding this NPC's attributes **/
+	Ucasino_simulatorAttributeSet* GetAttributeSet() const { return AttributeSet; }
+
+	/** Grants a single ability to this NPC's ASC. Server-only (no-ops on clients); returns an invalid handle if it couldn't be granted. */
+	UFUNCTION(BlueprintCallable, Category="Abilities")
+	FGameplayAbilitySpecHandle GrantAbility(TSubclassOf<UGameplayAbility> AbilityClass, int32 Level = 1);
+
+protected:
+
+	//~ Begin AActor interface
+	virtual void BeginPlay() override;
+	//~ End AActor interface
+
+	/** Bound to InteractionSphere's begin-overlap event */
+	UFUNCTION()
+	void OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+	/** Bound to InteractionSphere's end-overlap event */
+	UFUNCTION()
+	void OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+
+	UFUNCTION(BlueprintImplementableEvent, Category="Interaction", meta=(DisplayName="On Interact"))
+	void BP_OnInteract(Acasino_simulatorCharacter* InteractingCharacter);
+
+	/** Grants every ability in StartupAbilities to this NPC's ASC. Server-only; call after InitAbilityActorInfo. */
+	void GrantStartupAbilities();
+};

@@ -9,6 +9,14 @@
 #include "Blueprint/UserWidget.h"
 #include "casino_simulator.h"
 #include "Widgets/Input/SVirtualJoystick.h"
+#include "UI/casino_simulatorPlayerHUD.h"
+#include "casino_simulatorPlayerState.h"
+#include "casino_simulatorAttributeSet.h"
+#include "casino_simulatorCharacter.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "NPC/NPC_Base.h"
 
 Acasino_simulatorPlayerController::Acasino_simulatorPlayerController()
 {
@@ -38,6 +46,401 @@ void Acasino_simulatorPlayerController::BeginPlay()
 
 		}
 
+	}
+
+	// only spawn the player HUD on local player controllers
+	if (IsLocalPlayerController() && PlayerHUDWidgetClass)
+	{
+		// keep the HUD bound to whichever pawn we currently/next possess
+		OnPossessedPawnChanged.AddDynamic(this, &Acasino_simulatorPlayerController::HandlePossessedPawnChanged);
+
+		if (APawn* CurrentPawn = GetPawn())
+		{
+			HandlePossessedPawnChanged(nullptr, CurrentPawn);
+		}
+
+		// PlayerState is already valid here on the server/listen host; on a remote client it may
+		// still be null, in which case OnRep_PlayerState retries this once it replicates in.
+		TryInitializePlayerHUD();
+	}
+}
+
+void Acasino_simulatorPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	UnbindFromAbilitySystem();
+	BindToPlayerState(nullptr);
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void Acasino_simulatorPlayerController::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	// PlayerState may have been null at BeginPlay on remote clients; this fires once it actually arrives.
+	if (PlayerHUDWidget)
+	{
+		BindToPlayerState(GetPlayerState<Acasino_simulatorPlayerState>());
+	}
+	else
+	{
+		TryInitializePlayerHUD();
+	}
+}
+
+void Acasino_simulatorPlayerController::TryInitializePlayerHUD()
+{
+	if (PlayerHUDWidget || !PlayerHUDWidgetClass)
+	{
+		return;
+	}
+
+	Acasino_simulatorPlayerState* CurrentPlayerState = GetPlayerState<Acasino_simulatorPlayerState>();
+	if (!CurrentPlayerState)
+	{
+		return;
+	}
+
+	PlayerHUDWidget = CreateWidget<Ucasino_simulatorPlayerHUD>(this, PlayerHUDWidgetClass);
+
+	if (PlayerHUDWidget)
+	{
+		PlayerHUDWidget->AddToPlayerScreen(100);
+
+		BindToPlayerState(CurrentPlayerState);
+
+		// The pawn/ability system may already have been bound (e.g. from BeginPlay) before the HUD
+		// existed to receive them; push current values now instead of waiting for the next change.
+		PushInitialAttributeValues();
+	}
+	else
+	{
+		UE_LOG(Logcasino_simulator, Error, TEXT("Could not spawn player HUD widget."));
+	}
+}
+
+void Acasino_simulatorPlayerController::BindToPlayerState(Acasino_simulatorPlayerState* NewPlayerState)
+{
+	if (BoundPlayerState == NewPlayerState)
+	{
+		return;
+	}
+
+	if (BoundPlayerState)
+	{
+		BoundPlayerState->OnInventoryChanged.RemoveDynamic(this, &Acasino_simulatorPlayerController::RefreshInventorySlotCounts);
+	}
+
+	BoundPlayerState = NewPlayerState;
+
+	if (BoundPlayerState)
+	{
+		BoundPlayerState->OnInventoryChanged.AddDynamic(this, &Acasino_simulatorPlayerController::RefreshInventorySlotCounts);
+	}
+
+	RefreshInventorySlotCounts();
+}
+
+void Acasino_simulatorPlayerController::RefreshInventorySlotCounts()
+{
+	if (!PlayerHUDWidget)
+	{
+		return;
+	}
+
+	if (BoundPlayerState && BoundPlayerState->NumberSlots.Num() >= 2)
+	{
+		PlayerHUDWidget->BP_Slot_1Count(BoundPlayerState->GetItemQuantity(BoundPlayerState->NumberSlots[0]));
+		PlayerHUDWidget->BP_Slot_2Count(BoundPlayerState->GetItemQuantity(BoundPlayerState->NumberSlots[1]));
+	}
+	else
+	{
+		PlayerHUDWidget->BP_Slot_1Count(0);
+		PlayerHUDWidget->BP_Slot_2Count(0);
+	}
+}
+
+void Acasino_simulatorPlayerController::HandlePossessedPawnChanged(APawn* PreviousPawn, APawn* NewPawn)
+{
+	UnbindFromAbilitySystem();
+
+	if (const IAbilitySystemInterface* AbilitySystemInterface = Cast<IAbilitySystemInterface>(NewPawn))
+	{
+		BindToAbilitySystem(AbilitySystemInterface->GetAbilitySystemComponent());
+	}
+}
+
+void Acasino_simulatorPlayerController::BindToAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent)
+{
+	if (!AbilitySystemComponent)
+	{
+		return;
+	}
+
+	BoundAbilitySystemComponent = AbilitySystemComponent;
+
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetNicotineAttribute())
+		.AddUObject(this, &Acasino_simulatorPlayerController::OnNicotineChanged);
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetAlcoholAttribute())
+		.AddUObject(this, &Acasino_simulatorPlayerController::OnAlcoholChanged);
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetCurrencyAttribute())
+		.AddUObject(this, &Acasino_simulatorPlayerController::OnCurrencyChanged);
+
+	// push the current values immediately so the bars/text aren't left stale until the next change
+	PushInitialAttributeValues();
+}
+
+void Acasino_simulatorPlayerController::PushInitialAttributeValues()
+{
+	if (!PlayerHUDWidget || !BoundAbilitySystemComponent)
+	{
+		return;
+	}
+
+	if (const Ucasino_simulatorAttributeSet* Attributes = BoundAbilitySystemComponent->GetSet<Ucasino_simulatorAttributeSet>())
+	{
+		PlayerHUDWidget->BP_NicotineUpdated(Attributes->GetNicotine(), Attributes->GetMaxNicotine());
+		PlayerHUDWidget->BP_AlcoholUpdated(Attributes->GetAlcohol(), Attributes->GetMaxAlcohol());
+		PlayerHUDWidget->BP_CurrencyUpdated(Attributes->GetCurrency());
+	}
+}
+
+void Acasino_simulatorPlayerController::UnbindFromAbilitySystem()
+{
+	if (BoundAbilitySystemComponent)
+	{
+		BoundAbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetNicotineAttribute()).RemoveAll(this);
+		BoundAbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetAlcoholAttribute()).RemoveAll(this);
+		BoundAbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Ucasino_simulatorAttributeSet::GetCurrencyAttribute()).RemoveAll(this);
+		BoundAbilitySystemComponent = nullptr;
+	}
+}
+
+void Acasino_simulatorPlayerController::OnNicotineChanged(const FOnAttributeChangeData& Data)
+{
+	if (PlayerHUDWidget && BoundAbilitySystemComponent)
+	{
+		if (const Ucasino_simulatorAttributeSet* Attributes = BoundAbilitySystemComponent->GetSet<Ucasino_simulatorAttributeSet>())
+		{
+			PlayerHUDWidget->BP_NicotineUpdated(Data.NewValue, Attributes->GetMaxNicotine());
+		}
+	}
+}
+
+void Acasino_simulatorPlayerController::OnAlcoholChanged(const FOnAttributeChangeData& Data)
+{
+	if (PlayerHUDWidget && BoundAbilitySystemComponent)
+	{
+		if (const Ucasino_simulatorAttributeSet* Attributes = BoundAbilitySystemComponent->GetSet<Ucasino_simulatorAttributeSet>())
+		{
+			PlayerHUDWidget->BP_AlcoholUpdated(Data.NewValue, Attributes->GetMaxAlcohol());
+		}
+	}
+}
+
+void Acasino_simulatorPlayerController::OnCurrencyChanged(const FOnAttributeChangeData& Data)
+{
+	if (PlayerHUDWidget)
+	{
+		PlayerHUDWidget->BP_CurrencyUpdated(Data.NewValue);
+	}
+}
+
+void Acasino_simulatorPlayerController::SetInteractionTarget(ANPC_Base* NewInteractionTarget)
+{
+	if (!NewInteractionTarget)
+	{
+		return;
+	}
+
+	CurrentInteractionTarget = NewInteractionTarget;
+	OpenInteraction();
+}
+
+void Acasino_simulatorPlayerController::ClearInteractionTarget(ANPC_Base* InteractionTargetToClear)
+{
+	if (InteractionTargetToClear && CurrentInteractionTarget != InteractionTargetToClear)
+	{
+		return;
+	}
+
+	CurrentInteractionTarget = nullptr;
+	CloseInteraction();
+}
+
+void Acasino_simulatorPlayerController::InteractWithCurrentTarget()
+{
+	if (!CurrentInteractionTarget || bInteractionUIOpen)
+	{
+		return;
+	}
+
+	Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(GetPawn());
+	if (!PlayerCharacter)
+	{
+		return;
+	}
+
+	CurrentInteractionTarget->Interact(PlayerCharacter);
+}
+
+void Acasino_simulatorPlayerController::SetInteractionPromptSuppressed(bool bSuppressed)
+{
+	if (bInteractionPromptSuppressed == bSuppressed)
+	{
+		return;
+	}
+
+	bInteractionPromptSuppressed = bSuppressed;
+
+	if (bInteractionPromptSuppressed)
+	{
+		CloseInteraction();
+		return;
+	}
+
+	if (CurrentInteractionTarget && !bInteractionUIOpen)
+	{
+		OpenInteraction();
+	}
+}
+
+void Acasino_simulatorPlayerController::EnterInteractionUIMode(AActor* CameraTarget, float BlendTime)
+{
+	if (bInteractionUIOpen)
+	{
+		return;
+	}
+
+	bInteractionUIOpen = true;
+	CloseInteraction();
+
+	bShowMouseCursor = true;
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	InputMode.SetHideCursorDuringCapture(false);
+	SetInputMode(InputMode);
+
+	SetIgnoreMoveInput(true);
+	SetIgnoreLookInput(true);
+	SetLocalPawnMeshesHiddenForInteraction(true);
+
+	if (CameraTarget)
+	{
+		SetViewTargetWithBlend(CameraTarget, BlendTime);
+	}
+}
+
+void Acasino_simulatorPlayerController::ExitInteractionUIMode(float BlendTime)
+{
+	if (!bInteractionUIOpen)
+	{
+		return;
+	}
+
+	bInteractionUIOpen = false;
+
+	bShowMouseCursor = false;
+
+	FInputModeGameOnly InputMode;
+	SetInputMode(InputMode);
+
+	SetIgnoreMoveInput(false);
+	SetIgnoreLookInput(false);
+
+	if (APawn* ControlledPawn = GetPawn())
+	{
+		SetViewTargetWithBlend(ControlledPawn, BlendTime);
+	}
+
+	SetLocalPawnMeshesHiddenForInteraction(false);
+
+	if (CurrentInteractionTarget)
+	{
+		OpenInteraction();
+	}
+}
+
+void Acasino_simulatorPlayerController::SetLocalPawnMeshesHiddenForInteraction(bool bShouldHide)
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(GetPawn());
+	if (!PlayerCharacter)
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* FirstPersonMesh = PlayerCharacter->GetFirstPersonMesh();
+	USkeletalMeshComponent* WorldMesh = PlayerCharacter->GetMesh();
+
+	if (bShouldHide)
+	{
+		if (bInteractionPawnMeshesHidden)
+		{
+			return;
+		}
+
+		bPreviousFirstPersonMeshVisibility = FirstPersonMesh ? FirstPersonMesh->IsVisible() : true;
+		bPreviousWorldMeshVisibility = WorldMesh ? WorldMesh->IsVisible() : true;
+
+		if (FirstPersonMesh)
+		{
+			FirstPersonMesh->SetVisibility(false, true);
+		}
+
+		if (WorldMesh)
+		{
+			WorldMesh->SetVisibility(false, true);
+		}
+
+		bInteractionPawnMeshesHidden = true;
+		return;
+	}
+
+	if (!bInteractionPawnMeshesHidden)
+	{
+		return;
+	}
+
+	if (FirstPersonMesh)
+	{
+		FirstPersonMesh->SetVisibility(bPreviousFirstPersonMeshVisibility, true);
+	}
+
+	if (WorldMesh)
+	{
+		WorldMesh->SetVisibility(bPreviousWorldMeshVisibility, true);
+	}
+
+	bInteractionPawnMeshesHidden = false;
+}
+
+void Acasino_simulatorPlayerController::OpenInteraction()
+{
+	if (bInteractionUIOpen || bInteractionPromptSuppressed)
+	{
+		return;
+	}
+
+	// PlayerHUDWidget may still be null here: its creation now waits on PlayerState replicating in
+	// (see TryInitializePlayerHUD), so there's a brief window on remote clients where it doesn't exist yet.
+
+	if (PlayerHUDWidget)
+	{
+		PlayerHUDWidget->BP_OpenInterection();
+	}
+}
+
+void Acasino_simulatorPlayerController::CloseInteraction()
+{
+	if (PlayerHUDWidget)
+	{
+		PlayerHUDWidget->BP_CloseInterection();
 	}
 }
 
