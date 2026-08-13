@@ -79,7 +79,7 @@ public:
 	UCasinoShopComponent();
 
 	UFUNCTION(BlueprintPure, Category="Casino|Shop")
-	TArray<FCasinoShopItemData> GetShopItems() const { return ShopItems; }
+	TArray<FCasinoShopItemData> GetShopItems() const;
 
 	UFUNCTION(BlueprintPure, Category="Casino|Shop")
 	TArray<FCasinoShopItemData> GetShopItemsByCategory(ECasinoShopItemCategory Category) const;
@@ -125,6 +125,9 @@ protected:
 	TObjectPtr<UDataTable> ShopItemDataTable;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Casino|Shop|Items")
+	TObjectPtr<UDataTable> ItemDataTable;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Casino|Shop|Items")
 	TArray<FCasinoShopItemData> ShopItems;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Casino|Shop|Price", meta=(ClampMin="1"))
@@ -160,6 +163,8 @@ private:
 	bool ValidateQuantity(int32 Quantity, FString& OutReason) const;
 	int32 GetScaledPrice(int32 BasePrice) const;
 	const FCasinoShopItemData* FindShopItem(FName ItemId) const;
+	const UDataTable* GetResolvedItemDataTable() const;
+	bool ApplyInventoryItemData(FCasinoShopItemData& Item) const;
 	void BuildDefaultShopItems();
 	bool LoadShopItemsFromDataTable();
 	void FailPurchase(const FString& Reason);

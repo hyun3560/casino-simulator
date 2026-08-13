@@ -8,6 +8,7 @@
 #include "NPC_Base.generated.h"
 
 class USphereComponent;
+class UCameraComponent;
 class UPrimitiveComponent;
 class Acasino_simulatorCharacter;
 
@@ -24,12 +25,26 @@ class CASINO_SIMULATOR_API ANPC_Base : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	USphereComponent* InteractionSphere;
 
+	/** Camera used by default while this NPC owns an interaction UI. Adjust it per NPC Blueprint. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	UCameraComponent* InteractionCameraComponent;
+
+	/** Optional external view actor override. Leave empty to use this NPC's InteractionCameraComponent. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category="Interaction|Camera", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<AActor> InteractionCameraTarget;
+
 public:
 
 	ANPC_Base();
 
 	/** Returns the interaction/detection sphere component **/
 	USphereComponent* GetInteractionSphere() const { return InteractionSphere; }
+
+	/** Returns the camera component used by this NPC's interaction view **/
+	UCameraComponent* GetInteractionCameraComponent() const { return InteractionCameraComponent; }
+
+	UFUNCTION(BlueprintPure, Category="Interaction|Camera")
+	AActor* GetInteractionCameraTarget() const;
 
 	UFUNCTION(BlueprintCallable, Category="Interaction")
 	virtual void Interact(Acasino_simulatorCharacter* InteractingCharacter);

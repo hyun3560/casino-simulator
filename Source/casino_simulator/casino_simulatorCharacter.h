@@ -43,6 +43,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	UInputAction* JumpAction;
 
+	/** Interact Input Action */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	UInputAction* InteractAction;
+
 	/** Move Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	UInputAction* MoveAction;
@@ -134,6 +138,9 @@ protected:
 
 	/** Called from Input Actions for looking input */
 	void LookInput(const FInputActionValue& Value);
+
+	/** Called from Input Actions for interaction input */
+	void InteractInput(const FInputActionValue& Value);
 
 	/** Handles aim inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")

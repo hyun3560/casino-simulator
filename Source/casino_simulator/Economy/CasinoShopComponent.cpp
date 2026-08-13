@@ -7,6 +7,7 @@
 #include "Engine/DataTable.h"
 #include "GameFramework/Pawn.h"
 #include "GameplayEffect.h"
+#include "Item/ItemData.h"
 #include "Net/UnrealNetwork.h"
 #include "casino_simulatorAttributeSet.h"
 #include "casino_simulatorPlayerState.h"
@@ -74,6 +75,21 @@ void UCasinoShopComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 	DOREPLIFETIME(UCasinoShopComponent, CurrentDay);
 }
 
+TArray<FCasinoShopItemData> UCasinoShopComponent::GetShopItems() const
+{
+	TArray<FCasinoShopItemData> ResolvedItems;
+	ResolvedItems.Reserve(ShopItems.Num());
+
+	for (const FCasinoShopItemData& ShopItem : ShopItems)
+	{
+		FCasinoShopItemData ResolvedItem = ShopItem;
+		ApplyInventoryItemData(ResolvedItem);
+		ResolvedItems.Add(ResolvedItem);
+	}
+
+	return ResolvedItems;
+}
+
 TArray<FCasinoShopItemData> UCasinoShopComponent::GetShopItemsByCategory(ECasinoShopItemCategory Category) const
 {
 	TArray<FCasinoShopItemData> MatchingItems;
@@ -81,7 +97,9 @@ TArray<FCasinoShopItemData> UCasinoShopComponent::GetShopItemsByCategory(ECasino
 	{
 		if (Item.Category == Category)
 		{
-			MatchingItems.Add(Item);
+			FCasinoShopItemData ResolvedItem = Item;
+			ApplyInventoryItemData(ResolvedItem);
+			MatchingItems.Add(ResolvedItem);
 		}
 	}
 
@@ -93,6 +111,7 @@ bool UCasinoShopComponent::GetShopItem(FName ItemId, FCasinoShopItemData& OutIte
 	if (const FCasinoShopItemData* Item = FindShopItem(ItemId))
 	{
 		OutItem = *Item;
+		ApplyInventoryItemData(OutItem);
 		return true;
 	}
 
@@ -103,7 +122,9 @@ int32 UCasinoShopComponent::GetItemUnitPrice(FName ItemId) const
 {
 	if (const FCasinoShopItemData* Item = FindShopItem(ItemId))
 	{
-		return GetScaledPrice(Item->BasePrice);
+		FCasinoShopItemData ResolvedItem = *Item;
+		ApplyInventoryItemData(ResolvedItem);
+		return GetScaledPrice(ResolvedItem.BasePrice);
 	}
 
 	return 0;
@@ -178,15 +199,18 @@ bool UCasinoShopComponent::ProcessPurchase(FName ItemId, int32 Quantity)
 		return false;
 	}
 
-	const FCasinoShopItemData* Item = FindShopItem(ItemId);
-	if (!Item)
+	const FCasinoShopItemData* FoundItem = FindShopItem(ItemId);
+	if (!FoundItem)
 	{
 		FailPurchase(TEXT("Shop item was not found."));
 		return false;
 	}
 
+	FCasinoShopItemData Item = *FoundItem;
+	ApplyInventoryItemData(Item);
+
 	const int32 TotalPrice = GetItemTotalPrice(ItemId, Quantity);
-	if (!CanGrantPurchasedItems(*Item, Reason))
+	if (!CanGrantPurchasedItems(Item, Reason))
 	{
 		FailPurchase(Reason);
 		return false;
@@ -198,15 +222,15 @@ bool UCasinoShopComponent::ProcessPurchase(FName ItemId, int32 Quantity)
 		return false;
 	}
 
-	if (!GrantPurchasedItems(*Item, Quantity))
+	if (!GrantPurchasedItems(Item, Quantity))
 	{
 		RefundPurchase(TotalPrice);
 		FailPurchase(TEXT("Could not add item to inventory."));
 		return false;
 	}
 
-	const bool bShouldApplyEffects = Item->bApplyEffectsOnPurchase || Item->InventoryItemID == INDEX_NONE;
-	if (bShouldApplyEffects && !ApplyItemEffects(*Item, Quantity))
+	const bool bShouldApplyEffects = Item.bApplyEffectsOnPurchase || Item.InventoryItemID == INDEX_NONE;
+	if (bShouldApplyEffects && !ApplyItemEffects(Item, Quantity))
 	{
 		RefundPurchase(TotalPrice);
 		FailPurchase(TEXT("Could not apply item effect."));
@@ -398,6 +422,11 @@ bool UCasinoShopComponent::ValidateQuantity(int32 Quantity, FString& OutReason) 
 
 int32 UCasinoShopComponent::GetScaledPrice(int32 BasePrice) const
 {
+	if (BasePrice <= 0)
+	{
+		return 0;
+	}
+
 	return FMath::Max(FMath::RoundToInt(BasePrice * GetCurrentPriceMultiplier()), 1);
 }
 
@@ -407,6 +436,51 @@ const FCasinoShopItemData* UCasinoShopComponent::FindShopItem(FName ItemId) cons
 	{
 		return Item.ItemId == ItemId;
 	});
+}
+
+const UDataTable* UCasinoShopComponent::GetResolvedItemDataTable() const
+{
+	if (ItemDataTable)
+	{
+		return ItemDataTable;
+	}
+
+	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	const Acasino_simulatorPlayerState* CasinoPlayerState = OwnerPawn ? OwnerPawn->GetPlayerState<Acasino_simulatorPlayerState>() : nullptr;
+	return CasinoPlayerState ? CasinoPlayerState->ItemDataTable : nullptr;
+}
+
+bool UCasinoShopComponent::ApplyInventoryItemData(FCasinoShopItemData& Item) const
+{
+	if (Item.InventoryItemID == INDEX_NONE)
+	{
+		return false;
+	}
+
+	const UDataTable* ResolvedItemDataTable = GetResolvedItemDataTable();
+	if (!ResolvedItemDataTable)
+	{
+		return false;
+	}
+
+	for (const TPair<FName, uint8*>& RowPair : ResolvedItemDataTable->GetRowMap())
+	{
+		const FItemData* InventoryItemData = reinterpret_cast<const FItemData*>(RowPair.Value);
+		if (!InventoryItemData || InventoryItemData->UniqueID != Item.InventoryItemID)
+		{
+			continue;
+		}
+
+		Item.DisplayName = InventoryItemData->DisplayName;
+		Item.Description = InventoryItemData->Description;
+		Item.Icon = InventoryItemData->Icon.LoadSynchronous();
+		Item.BasePrice = InventoryItemData->Price;
+		Item.RestoreAmount = InventoryItemData->EffectMagnitude;
+		Item.RecoveryEffectClass = InventoryItemData->OnUseEffect;
+		return true;
+	}
+
+	return false;
 }
 
 bool UCasinoShopComponent::LoadShopItemsFromDataTable()

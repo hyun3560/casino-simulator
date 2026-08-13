@@ -207,6 +207,12 @@ void Acasino_simulatorCharacter::SetupPlayerInputComponent(UInputComponent* Play
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &Acasino_simulatorCharacter::DoJumpStart);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &Acasino_simulatorCharacter::DoJumpEnd);
 
+		// Interacting
+		if (InteractAction)
+		{
+			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &Acasino_simulatorCharacter::InteractInput);
+		}
+
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &Acasino_simulatorCharacter::MoveInput);
 
@@ -246,6 +252,14 @@ void Acasino_simulatorCharacter::LookInput(const FInputActionValue& Value)
 	// pass the axis values to the aim input
 	DoAim(LookAxisVector.X, LookAxisVector.Y);
 
+}
+
+void Acasino_simulatorCharacter::InteractInput(const FInputActionValue& Value)
+{
+	if (Acasino_simulatorPlayerController* PC = Cast<Acasino_simulatorPlayerController>(GetController()))
+	{
+		PC->InteractWithCurrentTarget();
+	}
 }
 
 void Acasino_simulatorCharacter::DoAim(float Yaw, float Pitch)
