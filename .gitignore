@@ -26,5 +26,3 @@ Backup*/
 # OS metadata
 Thumbs.db
 Desktop.ini
-# Large local assets shared outside Git
-Content/LJH/Asset/
