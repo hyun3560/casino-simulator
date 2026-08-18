@@ -280,8 +280,22 @@ void Acasino_simulatorPlayerController::InteractWithCurrentTarget()
 	{
 		return;
 	}
+	FVector Location = PlayerCharacter->GetActorLocation();
+	FVector ForwardLocation = PlayerCharacter->GetActorForwardVector() * 1000.f;
+	FVector LineLocation = Location + ForwardLocation;
 
-	CurrentInteractionTarget->Interact(PlayerCharacter);
+	FHitResult OutHit;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(PlayerCharacter);
+
+	GetWorld()->LineTraceSingleByChannel(OutHit, Location, LineLocation, ECollisionChannel::ECC_Visibility, Params);
+
+	ANPC_Base* HitNPC = Cast<ANPC_Base>(OutHit.GetActor());
+
+	if (HitNPC)
+	{
+		CurrentInteractionTarget->Interact(PlayerCharacter);
+	}
 }
 
 void Acasino_simulatorPlayerController::SetInteractionPromptSuppressed(bool bSuppressed)
