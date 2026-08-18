@@ -91,13 +91,74 @@ bool FSlotMachineEvaluator::EvaluateSingleLine(
 		return false;
 	}
 
-	const int32 FirstBoardIndex = LineIndexes[0];
-
-	if (!ResultSymbols.IsValidIndex(FirstBoardIndex))
+	for (const int32 BoardIndex : LineIndexes)
 	{
-		return false;
+		if (!ResultSymbols.IsValidIndex(BoardIndex))
+		{
+			return false;
+		}
 	}
 
+	const ESlotLineType LineType = FSlotMachinePaylines::GetPaylineType(LineIndex);
+
+	if (LineType == ESlotLineType::Horizontal)
+	{
+		int32 BestStartPosition = INDEX_NONE;
+		int32 BestMatchCount = 0;
+		ESlotSymbol BestSymbol = ESlotSymbol::None;
+
+		for (int32 LinePosition = 0; LinePosition < LineIndexes.Num();)
+		{
+			const ESlotSymbol CurrentSymbol = ResultSymbols[LineIndexes[LinePosition]];
+
+			if (CurrentSymbol == ESlotSymbol::None)
+			{
+				++LinePosition;
+				continue;
+			}
+
+			int32 CurrentMatchCount = 1;
+
+			for (int32 NextPosition = LinePosition + 1; NextPosition < LineIndexes.Num(); ++NextPosition)
+			{
+				if (ResultSymbols[LineIndexes[NextPosition]] != CurrentSymbol)
+				{
+					break;
+				}
+
+				++CurrentMatchCount;
+			}
+
+			if (CurrentMatchCount > BestMatchCount)
+			{
+				BestStartPosition = LinePosition;
+				BestMatchCount = CurrentMatchCount;
+				BestSymbol = CurrentSymbol;
+			}
+
+			LinePosition += CurrentMatchCount;
+		}
+
+		if (!IsLineEligibleForMatchCount(LineType, BestMatchCount))
+		{
+			return false;
+		}
+
+		OutLineWin.LineIndex = LineIndex;
+		OutLineWin.LineType = LineType;
+		OutLineWin.WinningSymbol = BestSymbol;
+		OutLineWin.MatchCount = BestMatchCount;
+		OutLineWin.ResultType = GetResultTypeByMatchCount(BestMatchCount);
+
+		for (int32 Offset = 0; Offset < BestMatchCount; ++Offset)
+		{
+			OutLineWin.LineIndexes.Add(LineIndexes[BestStartPosition + Offset]);
+		}
+
+		return true;
+	}
+
+	const int32 FirstBoardIndex = LineIndexes[0];
 	const ESlotSymbol FirstSymbol = ResultSymbols[FirstBoardIndex];
 
 	if (FirstSymbol == ESlotSymbol::None)
@@ -111,11 +172,6 @@ bool FSlotMachineEvaluator::EvaluateSingleLine(
 	{
 		const int32 BoardIndex = LineIndexes[LinePosition];
 
-		if (!ResultSymbols.IsValidIndex(BoardIndex))
-		{
-			return false;
-		}
-
 		if (ResultSymbols[BoardIndex] != FirstSymbol)
 		{
 			break;
@@ -123,8 +179,6 @@ bool FSlotMachineEvaluator::EvaluateSingleLine(
 
 		++MatchCount;
 	}
-
-	const ESlotLineType LineType = FSlotMachinePaylines::GetPaylineType(LineIndex);
 
 	if (!IsLineEligibleForMatchCount(LineType, MatchCount))
 	{
@@ -140,7 +194,6 @@ bool FSlotMachineEvaluator::EvaluateSingleLine(
 
 	return true;
 }
-
 // 한 판 전체 결과를 판정합니다.
 // 전체화면이면 즉시 반환하고, 아니면 모든 페이라인을 검사합니다.
 FSlotSpinResult FSlotMachineEvaluator::EvaluateSlotResult(const TArray<ESlotSymbol>& ResultSymbols)

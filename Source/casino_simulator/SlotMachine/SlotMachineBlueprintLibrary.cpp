@@ -97,3 +97,46 @@ FName USlotMachineBlueprintLibrary::GetSlotSymbolRowName(ESlotSymbol Symbol)
 		return NAME_None;
 	}
 }
+ESlotSpinOutcome USlotMachineBlueprintLibrary::RollSpinOutcomeByWeight(UDataTable* OutcomeWeightDataTable)
+{
+	if (!OutcomeWeightDataTable)
+	{
+		return ESlotSpinOutcome::Lose;
+	}
+
+	TArray<FSlotOutcomeWeightData*> Rows;
+	OutcomeWeightDataTable->GetAllRows<FSlotOutcomeWeightData>(TEXT("RollSpinOutcomeByWeight"), Rows);
+
+	int32 TotalWeight = 0;
+	for (const FSlotOutcomeWeightData* Row : Rows)
+	{
+		if (Row && Row->Weight > 0)
+		{
+			TotalWeight += Row->Weight;
+		}
+	}
+
+	if (TotalWeight <= 0)
+	{
+		return ESlotSpinOutcome::Lose;
+	}
+
+	int32 RandomWeight = FMath::RandRange(1, TotalWeight);
+
+	for (const FSlotOutcomeWeightData* Row : Rows)
+	{
+		if (!Row || Row->Weight <= 0)
+		{
+			continue;
+		}
+
+		RandomWeight -= Row->Weight;
+
+		if (RandomWeight <= 0)
+		{
+			return Row->Outcome;
+		}
+	}
+
+	return ESlotSpinOutcome::Lose;
+}

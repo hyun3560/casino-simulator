@@ -62,4 +62,8 @@ public:
 	// C++ enum 문자열은 Row Name과 다를 수 있으므로 BP에서 DataTable을 찾을 때 이 함수를 사용합니다.
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Slot Machine")
 	static FName GetSlotSymbolRowName(ESlotSymbol Symbol);
+
+	// Outcome Weight DataTable을 읽어서 이번 스핀의 목표 결과를 가중치 기반으로 뽑습니다.
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Slot Machine")
+	static ESlotSpinOutcome RollSpinOutcomeByWeight(UDataTable* OutcomeWeightDataTable);
 };

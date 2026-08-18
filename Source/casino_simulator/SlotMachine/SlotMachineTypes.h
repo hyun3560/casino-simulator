@@ -47,6 +47,35 @@ enum class ESlotLineType : uint8
 	FullScreen UMETA(DisplayName = "Full Screen")
 };
 
+UENUM(BlueprintType)
+enum class ESlotSpinOutcome : uint8
+{
+	Lose UMETA(DisplayName = "Lose"),
+	Horizontal3 UMETA(DisplayName = "Horizontal 3"),
+	Horizontal4 UMETA(DisplayName = "Horizontal 4"),
+	Horizontal5 UMETA(DisplayName = "Horizontal 5"),
+	Vertical3 UMETA(DisplayName = "Vertical 3"),
+	Diagonal3 UMETA(DisplayName = "Diagonal 3"),
+	VShape5 UMETA(DisplayName = "V Shape 5"),
+	InvertedVShape5 UMETA(DisplayName = "Inverted V Shape 5"),
+	FullScreen UMETA(DisplayName = "Full Screen")
+};
+
+USTRUCT(BlueprintType)
+struct FSlotOutcomeWeightData : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	ESlotSpinOutcome Outcome = ESlotSpinOutcome::Lose;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 Weight = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ExpectedChance = 0.0f;
+};
+
 USTRUCT(BlueprintType)
 struct FSlotSymbolData : public FTableRowBase
 {
