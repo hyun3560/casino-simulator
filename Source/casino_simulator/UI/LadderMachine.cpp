@@ -6,6 +6,19 @@ ALadderMachine::ALadderMachine()
 {
 	// 로직 액터라 매 프레임 틱 불필요. (트레이스 연출은 위젯이 담당)
 	PrimaryActorTick.bCanEverTick = false;
+
+	// 기본 배당 테이블 (합계 = 줄 개수 → 공정 EV). BP 디폴트에서 편집 가능.
+	auto Add = [this](int32 R, const TArray<int32>& M)
+	{
+		FPayoutOption O; O.Rails = R; O.Multipliers = M; PayoutTable.Add(O);
+	};
+	Add(3, { 0, 0, 3 });
+	Add(4, { 0, 0, 2, 2 });
+	Add(4, { 0, 0, 0, 4 });
+	Add(4, { 0, 0, 1, 3 });
+	Add(5, { 0, 0, 0, 1, 4 });
+	Add(5, { 0, 0, 0, 0, 5 });
+	Add(5, { 0, 0, 0, 2, 3 });
 }
 
 void ALadderMachine::BeginPlay()
@@ -46,25 +59,52 @@ void ALadderMachine::SetRailCount(int32 NewRails)
 
 void ALadderMachine::BuildPayouts()
 {
-	Payouts.Reset();
-	for (int32 i = 0; i < Rails; ++i)
-	{
-		Payouts.Add(BasePayouts.IsValidIndex(i) ? BasePayouts[i] : 0);   // 모자라면 꽝(0)
-	}
-	// Fisher-Yates 셔플
-	for (int32 i = Payouts.Num() - 1; i > 0; --i)
-	{
-		Payouts.Swap(i, FMath::RandRange(0, i));
-	}
+	Payouts = RollPayouts();   // 현재 Rails용 후보 뽑고 위치 셔플
 }
 
 void ALadderMachine::ShuffleResults()
 {
-	for (int32 i = Payouts.Num() - 1; i > 0; --i)
-	{
-		Payouts.Swap(i, FMath::RandRange(0, i));
-	}
+	Payouts = RollPayouts();   // 리롤: 후보 다시 뽑고(다른 분포 가능) 위치도 셔플
 	OnResultsChanged.Broadcast();
+}
+
+TArray<int32> ALadderMachine::RollPayouts()
+{
+	// 1) 현재 Rails에 해당하는 후보 항목들 수집
+	TArray<int32> MatchIdx;
+	for (int32 i = 0; i < PayoutTable.Num(); ++i)
+	{
+		if (PayoutTable[i].Rails == Rails)
+		{
+			MatchIdx.Add(i);
+		}
+	}
+
+	// 2) 후보 하나 랜덤 선택 (없으면 BasePayouts 폴백)
+	TArray<int32> Result;
+	if (MatchIdx.Num() > 0)
+	{
+		const int32 Pick = MatchIdx[FMath::RandRange(0, MatchIdx.Num() - 1)];
+		Result = PayoutTable[Pick].Multipliers;
+	}
+	else
+	{
+		for (int32 i = 0; i < Rails; ++i)
+		{
+			Result.Add(BasePayouts.IsValidIndex(i) ? BasePayouts[i] : 0);
+		}
+	}
+
+	// 3) 길이 보정 (모자라면 0으로 채우고 넘치면 자름)
+	Result.SetNum(Rails);
+
+	// 4) 위치 셔플 (어느 줄이 어느 배당인지 섞기, Fisher-Yates)
+	for (int32 i = Result.Num() - 1; i > 0; --i)
+	{
+		Result.Swap(i, FMath::RandRange(0, i));
+	}
+
+	return Result;
 }
 
 int32 ALadderMachine::GetPayout(int32 Rail) const

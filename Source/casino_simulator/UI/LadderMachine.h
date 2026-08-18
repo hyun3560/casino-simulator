@@ -28,6 +28,22 @@ enum class ELadderMode : uint8
 	Refresh     UMETA(DisplayName = "새로고침"),
 };
 
+/** 배당 테이블 한 항목: 특정 줄 개수에서 나올 수 있는 배당 후보 하나.
+ *  같은 Rails 값으로 여러 개 넣으면, 새로고침(리롤) 시 그 중 하나가 랜덤으로 뽑힌다.
+ *  Multipliers 길이는 Rails 와 같게 (모자라면 0으로 채우고 넘치면 잘림). 0 = 꽝.
+ *  예) {4, [0,0,2,2]}, {4, [0,0,0,4]}, {4, [0,0,1,3]} → 4줄일 때 셋 중 랜덤. */
+USTRUCT(BlueprintType)
+struct FPayoutOption
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder")
+	int32 Rails = 3;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder")
+	TArray<int32> Multipliers;
+};
+
 // ── Dispatcher 선언 ──
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FLadderIntEvent, int32, Value);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FLadderSimpleEvent);
@@ -56,7 +72,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder")
 	int32 MaxRails = 5;
 
-	/** 기본 배당 셋. 예: [0,0,2,3,5]. Rails 개수만큼 앞에서 사용. 0 = 꽝. */
+	/** 배당 테이블. 줄 개수별 배당 후보들. 같은 Rails로 여러 항목 → 리롤 시 랜덤 선택.
+	 *  BP 디폴트에서 편집. 현재 Rails에 항목이 없으면 아래 BasePayouts로 폴백. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder|Result")
+	TArray<FPayoutOption> PayoutTable;
+
+	/** 폴백용 기본 배당 셋. PayoutTable에 현재 Rails 항목이 없을 때만 앞에서 Rails개 사용. 0 = 꽝. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder|Result")
 	TArray<int32> BasePayouts = { 0, 0, 2, 3, 5 };
 
@@ -210,6 +231,7 @@ protected:
 
 private:
 	void BuildPayouts();
+	TArray<int32> RollPayouts();   // 현재 Rails용 후보 랜덤 선택 + 위치 셔플
 	void ClearBoard();
 	void Play(int32 StartRail);   // NavSelect(RailSelect) 내부 호출
 
