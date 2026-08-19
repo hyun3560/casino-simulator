@@ -75,6 +75,17 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Shop", meta = (AllowPrivateAccess = "true"))
 	UCasinoShopComponent* ShopComponent;
 
+	/*½½·Ô¸Ó½Å*/
+	UFUNCTION(BlueprintCallable, Category = "Economy|Currency")
+	bool TrySpendCurrency(float Amount);
+
+	UFUNCTION(BlueprintCallable, Category = "Economy|Currency")
+	void AddCurrency(float Amount);
+
+	UFUNCTION(BlueprintPure, Category = "Economy|Currency")
+	float GetCurrency() const;
+	/*½½·Ô¸Ó½Å*/
+
 	/** Infinite periodic GameplayEffect (typically a Blueprint) that decays Nicotine/Alcohol over time. Applied once, server-side. */
 	UPROPERTY(EditDefaultsOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UGameplayEffect> AttributeDecayEffectClass;
