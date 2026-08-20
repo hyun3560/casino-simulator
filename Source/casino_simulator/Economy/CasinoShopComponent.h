@@ -130,7 +130,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Casino|Shop|Items")
 	TArray<FCasinoShopItemData> ShopItems;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Casino|Shop|Price", meta=(ClampMin="1"))
+	UPROPERTY(Replicated, EditDefaultsOnly, BlueprintReadOnly, Category="Casino|Shop|Price", meta=(ClampMin="1"))
 	int32 CurrentDay = 1;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Casino|Shop|Price", meta=(ClampMin="0.0"))

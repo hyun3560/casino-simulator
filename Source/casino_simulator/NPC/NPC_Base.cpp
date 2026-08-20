@@ -1,7 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "NPC_Base.h"
-#include "Camera/CameraComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "AbilitySystemComponent.h"
@@ -18,12 +17,6 @@ ANPC_Base::ANPC_Base()
 	InteractionSphere->SetupAttachment(GetCapsuleComponent());
 	InteractionSphere->InitSphereRadius(150.0f);
 	InteractionSphere->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
-
-	InteractionCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("InteractionCamera"));
-	InteractionCameraComponent->SetupAttachment(GetCapsuleComponent());
-	InteractionCameraComponent->SetRelativeLocation(FVector(180.0f, -180.0f, 90.0f));
-	InteractionCameraComponent->SetRelativeRotation(FRotator(0.0f, 135.0f, 0.0f));
-	InteractionCameraComponent->bAutoActivate = true;
 
 	// Create the ability system component. Attributes/abilities/effects are replicated
 	// via the ASC itself, so the actor doesn't need to replicate it separately.
@@ -105,11 +98,6 @@ void ANPC_Base::Interact(Acasino_simulatorCharacter* InteractingCharacter)
 	}
 
 	BP_OnInteract(InteractingCharacter);
-}
-
-AActor* ANPC_Base::GetInteractionCameraTarget() const
-{
-	return InteractionCameraTarget ? InteractionCameraTarget.Get() : const_cast<ANPC_Base*>(this);
 }
 
 void ANPC_Base::OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)

@@ -65,6 +65,59 @@ UAbilitySystemComponent* Acasino_simulatorCharacter::GetAbilitySystemComponent()
 	return AbilitySystemComponent;
 }
 
+bool Acasino_simulatorCharacter::TrySpendCurrency(float Amount)
+{
+	if (Amount <= 0.0f || !AbilitySystemComponent)
+	{
+		return false;
+	}
+
+	const FGameplayAttribute CurrencyAttribute =
+		Ucasino_simulatorAttributeSet::GetCurrencyAttribute();
+
+	const float CurrentCurrency =
+		AbilitySystemComponent->GetNumericAttribute(CurrencyAttribute);
+
+	if (CurrentCurrency < Amount)
+	{
+		return false;
+	}
+
+	AbilitySystemComponent->ApplyModToAttribute(
+		CurrencyAttribute,
+		EGameplayModOp::Additive,
+		-Amount
+	);
+
+	return true;
+}
+
+void Acasino_simulatorCharacter::AddCurrency(float Amount)
+{
+	if (Amount <= 0.0f || !AbilitySystemComponent)
+	{
+		return;
+	}
+
+	AbilitySystemComponent->ApplyModToAttribute(
+		Ucasino_simulatorAttributeSet::GetCurrencyAttribute(),
+		EGameplayModOp::Additive,
+		Amount
+	);
+}
+
+float Acasino_simulatorCharacter::GetCurrency() const
+{
+	if (!AbilitySystemComponent)
+	{
+		return 0.0f;
+	}
+
+	return AbilitySystemComponent->GetNumericAttribute(
+		Ucasino_simulatorAttributeSet::GetCurrencyAttribute()
+	);
+}
+
 void Acasino_simulatorCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
