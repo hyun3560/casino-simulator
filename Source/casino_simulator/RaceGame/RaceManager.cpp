@@ -50,34 +50,19 @@ void ARaceManager::BeginPlay()
 	if (HasAuthority()) StartNewRound();
 }
 
-void ARaceManager::ShuffleBuckets()
-{
-	LaneBuckets = { 0, 1, 2, 3 };   // 구간 4개
-
-	// Fisher–Yates 셔플
-	for (int32 i = LaneBuckets.Num() - 1; i > 0; --i)
-	{
-		const int32 j = FMath::RandRange(0, i);
-		LaneBuckets.Swap(i, j);
-	}
-}
-
 FRaceRunnerStats ARaceManager::RollStats(int32 LaneIndex) const
 {
 	static const int32 Lo[4] = { 65, 75, 85, 95 };
 	static const int32 Hi[4] = { 74, 84, 94, 104 };
-
-	// LaneIndex는 유지 → 그 레인에 배정된 구간만 셔플된 값에서 가져옴
-	const int32 Bucket = LaneBuckets.IsValidIndex(LaneIndex)
-		? LaneBuckets[LaneIndex]
-		: LaneIndex;   // 준비 안 됐으면 예전처럼 순서대로 폴백
+	const int32 Bucket = (LaneIndex < 4) ? LaneIndex : FMath::RandRange(0, 3);
 
 	FRaceRunnerStats S;
-	S.Age = FMath::RandRange(Lo[Bucket], Hi[Bucket]);
-	S.Name = KRNames[FMath::RandRange(0, UE_ARRAY_COUNT(KRNames) - 1)];
-	S.BaseSpeed = 225.f - (S.Age - 60) * 2.6f;
-	S.AwakenChance = FMath::Max(0.f, (S.Age - 68) / 27.f) * 0.32f;
+	S.Age           = FMath::RandRange(Lo[Bucket], Hi[Bucket]);
+	S.Name          = KRNames[FMath::RandRange(0, UE_ARRAY_COUNT(KRNames) - 1)];
+	S.BaseSpeed     = 225.f - (S.Age - 60) * 2.6f;
+	S.AwakenChance  = FMath::Max(0.f, (S.Age - 68) / 27.f) * 0.32f;
 	S.StumbleChance = FMath::Max(0.f, (S.Age - 68) / 27.f) * 0.30f;
+
 	const float Raw = 1.8f + FMath::Pow((S.Age - 60) / 35.f, 1.4f) * 7.f;
 	S.Odds = FMath::RoundToFloat(Raw * 10.f) / 10.f;
 	return S;
@@ -114,17 +99,32 @@ void ARaceManager::StartNewRound()
 		return;
 	}
 
+	const bool bUseSpawnPoints = SpawnPoints.Num() > 0;
+	const int32 Count = bUseSpawnPoints ? SpawnPoints.Num() : NumRunners;
+
 	const FVector DirN = RaceDirection.GetSafeNormal();
 	const FVector Side = FVector::CrossProduct(DirN, FVector::UpVector).GetSafeNormal();
 
-	ShuffleBuckets();
-	for (int32 i = 0; i < NumRunners; ++i)
-	{
-		const FVector Loc = StartLocation + Side * (LaneSpacing * i);
+	FActorSpawnParameters SP;
+	SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-		FActorSpawnParameters SP;
-		SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		ARaceRunner* R = GetWorld()->SpawnActor<ARaceRunner>(RunnerClass, Loc, DirN.Rotation(), SP);
+	for (int32 i = 0; i < Count; ++i)
+	{
+		FVector  Loc;
+		FRotator Rot;
+		if (bUseSpawnPoints)
+		{
+			if (!SpawnPoints[i]) continue;                    // 순서대로: i번 지점 = i번 러너
+			Loc = SpawnPoints[i]->GetActorLocation();
+			Rot = SpawnPoints[i]->GetActorRotation();
+		}
+		else
+		{
+			Loc = StartLocation + Side * (LaneSpacing * i);   // 폴백: 하드코딩 계산
+			Rot = DirN.Rotation();
+		}
+
+		ARaceRunner* R = GetWorld()->SpawnActor<ARaceRunner>(RunnerClass, Loc, Rot, SP);
 		if (!R) continue;
 
 		R->InitStats(RollStats(i));
@@ -141,7 +141,6 @@ void ARaceManager::StartRace()
 {
 	if (!HasAuthority() || Phase != ERacePhase::Betting) return;
 
-	const FVector DirN = RaceDirection.GetSafeNormal();
 	float BestTime = 1.0e9f, MaxTime = 0.f;
 	int32 Best = -1;
 
@@ -150,8 +149,8 @@ void ARaceManager::StartRace()
 		ARaceRunner* Rn = Runners[i];
 		if (!Rn) continue;
 
-		// 이번 판 레시피 롤 (랜덤은 여기서 한 번에 다 굴림)
-		const FRunnerRaceScript Script = RollScript(Rn->Stats, Rn->GetActorLocation(), DirN);
+		// 이번 판 레시피 롤 (랜덤은 여기서 한 번에 다 굴림). 방향 = 러너가 바라보는 쪽(스폰지점 방향).
+		const FRunnerRaceScript Script = RollScript(Rn->Stats, Rn->GetActorLocation(), Rn->GetActorForwardVector());
 		Rn->ServerSetupScript(Script);
 
 		// 승자 판정: 레시피로 완주 시각 결정론 계산
