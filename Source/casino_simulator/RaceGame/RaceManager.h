@@ -27,6 +27,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race") TSubclassOf<ARaceRunner> RunnerClass;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race") int32 NumRunners = 5;
 
+	// 레벨에 배치한 스폰 지점들. 순서대로 러너 스폰 (0번 지점 = 0번 러너).
+	// 비어있으면 아래 StartLocation/LaneSpacing로 자동 계산(폴백).
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Race|Track") TArray<AActor*> SpawnPoints;
+
+	// ↓ SpawnPoints 없을 때만 쓰는 폴백 값들
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Track") FVector StartLocation = FVector::ZeroVector;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Track") FVector RaceDirection = FVector(1, 0, 0);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Track") float   TrackLength = 3000.f;
@@ -52,13 +57,10 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
-	
 	UFUNCTION() void OnRep_Phase();
 
 	UPROPERTY() TArray<ARaceRunner*> Runners;
-	UPROPERTY() TArray<int32> LaneBuckets;
 
-	void ShuffleBuckets();
 	FRaceRunnerStats  RollStats(int32 LaneIndex) const;
 	FRunnerRaceScript RollScript(const FRaceRunnerStats& S, const FVector& StartLoc, const FVector& Dir) const;
 
