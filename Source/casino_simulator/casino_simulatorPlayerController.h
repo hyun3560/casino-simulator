@@ -102,7 +102,7 @@ protected:
 	UPROPERTY()
 	TObjectPtr<class Acasino_simulatorPlayerState> BoundPlayerState;
 
-	UPROPERTY()
+	UPROPERTY(BlueprintReadOnly)
 	TObjectPtr<ANPC_Base> CurrentInteractionTarget;
 
 	/** True while an interaction UI (shop/dialogue/exchange, etc.) owns input. */

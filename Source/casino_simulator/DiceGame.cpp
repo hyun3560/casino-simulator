@@ -2,8 +2,10 @@
 
 #include "DiceGame.h"
 #include "Dice.h"
+#include "NPC/NPC_Dice.h"
 #include "Components/TextRenderComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "TimerManager.h"
 
 ADiceGame::ADiceGame()
 {
@@ -63,21 +65,38 @@ void ADiceGame::SetDice(bool bVisible, int32 ResultValue)
 		SpawnedDice2->SetActorHiddenInGame(!bVisible);
 	}
 
-	ResultText->SetVisibility(bVisible);
+	GetWorldTimerManager().ClearTimer(ResultTextTimerHandle);
 
 	if (bVisible)
 	{
 		int MaxDice = ResultValue > 6 ? 6 : ResultValue - 1;
 		int RandValue = FMath::RandRange(ResultValue - MaxDice, MaxDice);
-			
+
 		SpawnedDice1->Roll(RandValue);
 		SpawnedDice2->Roll(ResultValue - RandValue);
-		
-		ResultText->SetText(FText::AsNumber(ResultValue));
+
+		// Hide the text for now; it's revealed after ResultTextRevealDelay so it doesn't pop in before the dice roll.
+		ResultText->SetVisibility(false);
+		ResultText->SetText(FText::GetEmpty());
+
+		FTimerDelegate RevealDelegate = FTimerDelegate::CreateUObject(this, &ADiceGame::ShowResultText, ResultValue);
+		GetWorldTimerManager().SetTimer(ResultTextTimerHandle, RevealDelegate, ResultTextRevealDelay, false);
 	}
 	else
 	{
+		ResultText->SetVisibility(false);
 		ResultText->SetText(FText::GetEmpty());
+	}
+}
+
+void ADiceGame::ShowResultText(int32 ResultValue)
+{
+	ResultText->SetVisibility(true);
+	ResultText->SetText(FText::AsNumber(ResultValue));
+	ANPC_Dice* NPC = Cast<ANPC_Dice>(Owner);
+	if (NPC)
+	{
+		NPC->ShowResult(ResultValue);
 	}
 }
 

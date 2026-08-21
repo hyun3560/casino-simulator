@@ -17,6 +17,15 @@ class Ucasino_simulatorAttributeSet;
 class UAnimMontage;
 class UGameplayAbility;
 
+/** Identifies what kind of NPC this is (e.g. which minigame/interaction it hosts). */
+UENUM(BlueprintType)
+enum class ENPCType : uint8
+{
+	None UMETA(DisplayName="None"),
+	Dice UMETA(DisplayName="Dice"),
+	Shop UMETA(DisplayName="Shop"),
+};
+
 /**
  *  Base class for all NPCs. ACharacter with its own AbilitySystemComponent/AttributeSet (the
  *  NPC is both owner and avatar - there's no PlayerState to host the ASC) and a sphere
@@ -32,6 +41,13 @@ class CASINO_SIMULATOR_API ANPC_Base : public ACharacter, public IAbilitySystemI
 	USphereComponent* InteractionSphere;
 
 protected:
+
+	/** What kind of NPC this is. Editable per-instance in the level or per-Blueprint in defaults. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="NPC", meta = (AllowPrivateAccess = "true"))
+	ENPCType NPCType = ENPCType::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC", meta = (AllowPrivateAccess = "true"))
+	bool CanInterection = true;
 
 	/** Ability system component driving this NPC's abilities/attributes/effects */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
@@ -67,6 +83,16 @@ public:
 
 	/** Returns the interaction/detection sphere component **/
 	USphereComponent* GetInteractionSphere() const { return InteractionSphere; }
+
+	/** Returns what kind of NPC this is **/
+	UFUNCTION(BlueprintPure, Category="NPC")
+	ENPCType GetNPCType() const { return NPCType; }
+
+	UFUNCTION(BlueprintPure, Category = "NPC")
+	bool GetCanInterection() const { return CanInterection; }
+
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	void SetCanInterection(bool value);
 
 	UFUNCTION(BlueprintCallable, Category="Interaction")
 	virtual void Interact(Acasino_simulatorCharacter* InteractingCharacter);

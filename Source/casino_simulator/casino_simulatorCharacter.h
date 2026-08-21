@@ -75,17 +75,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Shop", meta = (AllowPrivateAccess = "true"))
 	UCasinoShopComponent* ShopComponent;
 
-	/*½½·Ô¸Ó½Å*/
-	UFUNCTION(BlueprintCallable, Category = "Economy|Currency")
-	bool TrySpendCurrency(float Amount);
-
-	UFUNCTION(BlueprintCallable, Category = "Economy|Currency")
-	void AddCurrency(float Amount);
-
-	UFUNCTION(BlueprintPure, Category = "Economy|Currency")
-	float GetCurrency() const;
-	/*½½·Ô¸Ó½Å*/
-
 	/** Infinite periodic GameplayEffect (typically a Blueprint) that decays Nicotine/Alcohol over time. Applied once, server-side. */
 	UPROPERTY(EditDefaultsOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UGameplayEffect> AttributeDecayEffectClass;
@@ -115,6 +104,15 @@ public:
 	/** Returns the shop component used by shop/exchange UI blueprints **/
 	UFUNCTION(BlueprintPure, Category="Shop")
 	UCasinoShopComponent* GetShopComponent() const { return ShopComponent; }
+
+	UFUNCTION(BlueprintCallable, Category = "Economy|Currency")
+	bool TrySpendCurrency(float Amount);
+
+	UFUNCTION(BlueprintCallable, Category = "Economy|Currency")
+	void AddCurrency(float Amount);
+
+	UFUNCTION(BlueprintPure, Category = "Economy|Currency")
+	float GetCurrency() const;
 
 protected:
 
@@ -176,6 +174,8 @@ protected:
 	
 
 public:
+	UFUNCTION(BlueprintCallable)
+	void SetMousePoint(bool value);
 
 	/** Returns the first person mesh **/
 	USkeletalMeshComponent* GetFirstPersonMesh() const { return FirstPersonMesh; }

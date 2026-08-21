@@ -90,6 +90,11 @@ FGameplayAbilitySpecHandle ANPC_Base::GrantAbility(TSubclassOf<UGameplayAbility>
 	return Handle;
 }
 
+void ANPC_Base::SetCanInterection(bool value)
+{
+	CanInterection = value;
+}
+
 void ANPC_Base::Interact(Acasino_simulatorCharacter* InteractingCharacter)
 {
 	if (!InteractingCharacter)

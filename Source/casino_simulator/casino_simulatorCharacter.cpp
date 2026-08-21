@@ -279,6 +279,16 @@ void Acasino_simulatorCharacter::SetupPlayerInputComponent(UInputComponent* Play
 	}
 }
 
+void Acasino_simulatorCharacter::SetMousePoint(bool value)
+{
+	Acasino_simulatorPlayerController* PC = Cast<Acasino_simulatorPlayerController>(GetController());
+	
+	if (PC)
+	{
+		PC->SetShowMouseCursor(value);
+	}
+}
+
 
 void Acasino_simulatorCharacter::MoveInput(const FInputActionValue& Value)
 {

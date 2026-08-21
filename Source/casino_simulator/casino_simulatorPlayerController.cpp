@@ -270,7 +270,7 @@ void Acasino_simulatorPlayerController::ClearInteractionTarget(ANPC_Base* Intera
 
 void Acasino_simulatorPlayerController::InteractWithCurrentTarget()
 {
-	if (!CurrentInteractionTarget || bInteractionUIOpen)
+	if (!CurrentInteractionTarget || !CurrentInteractionTarget->GetCanInterection() || bInteractionUIOpen)
 	{
 		return;
 	}
@@ -294,6 +294,7 @@ void Acasino_simulatorPlayerController::InteractWithCurrentTarget()
 
 	if (HitNPC)
 	{
+		CloseInteraction();
 		CurrentInteractionTarget->Interact(PlayerCharacter);
 	}
 }
@@ -436,7 +437,7 @@ void Acasino_simulatorPlayerController::SetLocalPawnMeshesHiddenForInteraction(b
 
 void Acasino_simulatorPlayerController::OpenInteraction()
 {
-	if (bInteractionUIOpen || bInteractionPromptSuppressed)
+	if (bInteractionUIOpen || bInteractionPromptSuppressed || CurrentInteractionTarget->GetCanInterection() == false)
 	{
 		return;
 	}

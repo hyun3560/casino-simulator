@@ -61,4 +61,13 @@ protected:
 private:
 	/** Spawns one die from the given class at the given transform, or returns nullptr if the class isn't set. */
 	ADice* SpawnDice(TSubclassOf<ADice> DiceClass, const FTransform& SpawnTransform) const;
+
+	/** Reveals ResultText with the given value; called after ResultTextRevealDelay once dice start rolling. */
+	void ShowResultText(int32 ResultValue);
+
+	/** Delay (seconds) before ResultText appears after SetDice(true, ...) is called, so it shows up after the dice roll. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dice Game", meta = (AllowPrivateAccess = "true"))
+	float ResultTextRevealDelay = 0.4f;
+
+	FTimerHandle ResultTextTimerHandle;
 };
