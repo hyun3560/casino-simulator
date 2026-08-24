@@ -23,6 +23,9 @@ Backup*/
 # Codex temporary review artifacts
 .codex_tmp_ppt_view/
 
+# Local animation source assets
+Content/Casino_Animation/
+
 # OS metadata
 Thumbs.db
 Desktop.ini
