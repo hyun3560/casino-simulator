@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "NPC/NPC_Base.h"
+#include "NPC/NPC_Game.h"
 #include "NPC_Dice.generated.h"
 
 class UStaticMeshComponent;
@@ -13,7 +13,7 @@ class ADiceGame;
  * NPC variant hosting the dice minigame (shakes/holds the dice cup).
  */
 UCLASS()
-class CASINO_SIMULATOR_API ANPC_Dice : public ANPC_Base
+class CASINO_SIMULATOR_API ANPC_Dice : public ANPC_Game
 {
 	GENERATED_BODY()
 

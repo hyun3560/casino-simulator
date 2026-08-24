@@ -104,6 +104,7 @@ void Acasino_simulatorCharacter::AddCurrency(float Amount)
 		EGameplayModOp::Additive,
 		Amount
 	);
+	
 }
 
 float Acasino_simulatorCharacter::GetCurrency() const
