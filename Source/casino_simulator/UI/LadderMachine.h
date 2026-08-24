@@ -1,24 +1,20 @@
-// LadderMachine.h  (프로젝트 반영됨: Source/casino_simulator/UI/)
+// LadderMachine.h  (서버 권위 버전)
 //
-// 사다리 게임의 "머신" 액터 = Model.
-//  - 돈/규칙/상태/판 생성/정산을 전부 소유한다. (그리기는 전혀 안 함)
-//  - 상태 변화는 dispatcher 로 방송하고, 뷰(위젯)들이 구독해서 표시만 한다.
-//  - BP_LadderMachine 을 이 클래스로 재부모화(Reparent)해서 사용.
-//
-// 흐름:
-//   입력(BP) → 머신 Nav* → (RailSelect+Select) → Play(): Generator로 Plan 확정 + 정산까지 완료(돈 확정)
-//            → OnPlayStarted(Plan) 방송 → 위젯이 트레이스 연출
-//   위젯 트레이스 끝 → 머신 RevealFinished(): 최종 잔액 표시 + OnResult 방송 → 결과창 표시
-//   (정산은 Play에서 끝. RevealFinished는 "보여주기"만 — 멀티에서 클라 타이머가 돈을 못 몰게.)
+// 결정론적 재생 모델 (경마와 동일):
+//   - 서버가 결과(CurrentPlan)를 확정하고 돈을 정산한다.
+//   - 입력(Nav*)은 Server RPC로 서버에 올린다.  설정값은 Replicated + OnRep로 클라 동기화.
+//   - 판시작/결과/보드클리어 같은 일회성 이벤트는 Multicast RPC로 전 클라에 뿌린다(잔액도 같이 전달).
+//   - 당첨금은 서버 타이머(TraceDuration)가 끝날 때(=구슬 도착 즈음) 지급 → 스포일러 방지.
+//   - BP_LadderMachine 을 이 클래스로 재부모화해서 사용. 머신 Owner는 앉은 클라 컨트롤러로 SetOwner됨.
 
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Actor.h"
 #include "LadderGenerator.h"   // FLadderPlan / FLadderRungRow / ULadderGenerator
+#include "Machine/SeatedMachineBase.h"
 #include "LadderMachine.generated.h"
 
-/** 전환 버튼으로 순환하는 조작 모드 (기존 위젯에서 이동). */
+/** 전환 버튼으로 순환하는 조작 모드. */
 UENUM(BlueprintType)
 enum class ELadderMode : uint8
 {
@@ -28,10 +24,7 @@ enum class ELadderMode : uint8
 	Refresh     UMETA(DisplayName = "새로고침"),
 };
 
-/** 배당 테이블 한 항목: 특정 줄 개수에서 나올 수 있는 배당 후보 하나.
- *  같은 Rails 값으로 여러 개 넣으면, 새로고침(리롤) 시 그 중 하나가 랜덤으로 뽑힌다.
- *  Multipliers 길이는 Rails 와 같게 (모자라면 0으로 채우고 넘치면 잘림). 0 = 꽝.
- *  예) {4, [0,0,2,2]}, {4, [0,0,0,4]}, {4, [0,0,1,3]} → 4줄일 때 셋 중 랜덤. */
+/** 배당 테이블 한 항목. 같은 Rails 값 여러 개 → 리롤 시 랜덤. Multipliers 길이는 Rails. 0 = 꽝. */
 USTRUCT(BlueprintType)
 struct FPayoutOption
 {
@@ -52,15 +45,17 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FLadderPlayEvent, FLadderPlan, Plan)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FLadderResultEvent, bool, bWin, int32, DestRail, int32, Multiplier, int32, Winnings);
 
 UCLASS()
-class CASINO_SIMULATOR_API ALadderMachine : public AActor
+class CASINO_SIMULATOR_API ALadderMachine : public ASeatedMachineBase
 {
 	GENERATED_BODY()
 
 public:
 	ALadderMachine();
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	// ─────────── Config (디자이너 편집) ───────────
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_RailConfig, Category = "Ladder")
 	int32 Rails = 3;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder")
@@ -72,169 +67,134 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder")
 	int32 MaxRails = 5;
 
-	/** 배당 테이블. 줄 개수별 배당 후보들. 같은 Rails로 여러 항목 → 리롤 시 랜덤 선택.
-	 *  BP 디폴트에서 편집. 현재 Rails에 항목이 없으면 아래 BasePayouts로 폴백. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder|Result")
 	TArray<FPayoutOption> PayoutTable;
 
-	/** 폴백용 기본 배당 셋. PayoutTable에 현재 Rails 항목이 없을 때만 앞에서 Rails개 사용. 0 = 꽝. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder|Result")
 	TArray<int32> BasePayouts = { 0, 0, 2, 3, 5 };
 
-	/** 위장 가로줄 배치 확률. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder")
 	float FakeRungChance = 0.4f;
 
-	// ─────────── Money ───────────
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ladder|Money")
-	int32 Balance = 1000;
+	/** 트레이스(구슬) 연출 길이. 서버 정산 타이머가 이 값을 쓴다. 위젯 TraceDuration 과 같게 유지. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder|Trace")
+	float TraceDuration = 2.5f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder|Money")
+	// ─────────── Money ───────────
+	// 잔액은 이 머신이 소유 안 함: CurrentUser(캐릭터)의 GAS Currency 가 진짜 잔액. 읽기는 GetBalance().
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_Bet, Category = "Ladder|Money")
 	int32 BetAmount = 100;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ladder|Money")
 	int32 BetStep = 100;
 
-	// ─────────── Runtime state (읽기 전용) ───────────
-	/** 행 수 = Rails * RowsPerRail. SetRailCount 시 재계산. */
-	UPROPERTY(BlueprintReadOnly, Category = "Ladder")
+	// ─────────── Runtime state ───────────
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Ladder")
 	int32 Rows = 12;
 
-	/** 현재 각 줄(맨 아래)의 배당. 길이 = Rails. */
-	UPROPERTY(BlueprintReadOnly, Category = "Ladder|Result")
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Payouts, Category = "Ladder|Result")
 	TArray<int32> Payouts;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Ladder|Nav")
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Mode, Category = "Ladder|Nav")
 	ELadderMode Mode = ELadderMode::RailSelect;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Ladder|Nav")
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Cursor, Category = "Ladder|Nav")
 	int32 RailCursor = 0;
 
-	/** 트레이스(연출) 진행 중이라 새 판 시작 불가한 상태. */
+	// 표시용 잔액. 서버가 CurrentUser 의 실제 잔액을 여기 써서 전 클라로 복제한다.
+	// (GAS Currency 는 소유자 클라에만 복제되므로, 다른 클라가 잔액을 직접 못 읽는다 → 이 값이 필요.)
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_DisplayBalance, Category = "Ladder|Money")
+	int32 DisplayBalance = 0;
+
+	// 아래 3개는 리플리케이트 안 함 — 일회성 이벤트(Multicast)로 각 클라 로컬에 세팅된다.
 	UPROPERTY(BlueprintReadOnly, Category = "Ladder")
 	bool bIsPlaying = false;
 
-	/** 결과창이 열려 있는 동안 true. 이 동안 Nav 입력(전환/좌/우/선택)은 전부 무시된다.
-	 *  RevealFinished 에서 true, ResetRound(결과창 닫힘)에서 false. */
 	UPROPERTY(BlueprintReadOnly, Category = "Ladder")
 	bool bResultOpen = false;
 
-	/** 이번 판의 확정된 결과 + 그리기 데이터. */
 	UPROPERTY(BlueprintReadOnly, Category = "Ladder")
 	FLadderPlan CurrentPlan;
 
 	// ─────────── Dispatchers (뷰가 구독) ───────────
-	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events")
-	FLadderIntEvent OnBalanceChanged;
+	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events") FLadderIntEvent    OnBalanceChanged;
+	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events") FLadderIntEvent    OnBetChanged;
+	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events") FLadderIntEvent    OnRailCountChanged;
+	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events") FLadderModeEvent   OnModeChanged;
+	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events") FLadderIntEvent    OnCursorChanged;
+	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events") FLadderSimpleEvent OnResultsChanged;
+	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events") FLadderSimpleEvent OnInsufficientFunds;
+	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events") FLadderSimpleEvent OnBoardCleared;
+	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events") FLadderPlayEvent   OnPlayStarted;
+	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events") FLadderResultEvent OnResult;
+	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events") FLadderSimpleEvent OnResultClosed;
 
-	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events")
-	FLadderIntEvent OnBetChanged;
-
-	/** 세로줄 개수 변경 — BP에서 선택버튼/결과칸 재생성. */
-	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events")
-	FLadderIntEvent OnRailCountChanged;
-
-	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events")
-	FLadderModeEvent OnModeChanged;
-
-	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events")
-	FLadderIntEvent OnCursorChanged;
-
-	/** 배당 셔플됨 — BP에서 결과 슬롯 텍스트 갱신. */
-	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events")
-	FLadderSimpleEvent OnResultsChanged;
-
-	/** 잔액 부족 — BP에서 "잔액 부족" 피드백. */
-	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events")
-	FLadderSimpleEvent OnInsufficientFunds;
-
-	/** 판 비움(세로줄만) — 위젯이 그리기 판 초기화. */
-	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events")
-	FLadderSimpleEvent OnBoardCleared;
-
-	/** 판 시작 — 위젯이 이 Plan으로 트레이스 연출 시작. */
-	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events")
-	FLadderPlayEvent OnPlayStarted;
-
-	/** 정산까지 끝난 최종 결과 — MachineScreen/ResultWidget이 결과창 표시. */
-	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events")
-	FLadderResultEvent OnResult;
-
-	/** 결과창을 닫아야 함 — MachineScreen이 결과창 숨기기 + 배경 딤 해제. (OnResult의 짝) */
-	UPROPERTY(BlueprintAssignable, Category = "Ladder|Events")
-	FLadderSimpleEvent OnResultClosed;
-
-	// ─────────── Config ops ───────────
-	UFUNCTION(BlueprintCallable, Category = "Ladder")
-	void SetRailCount(int32 NewRails);
-
-	UFUNCTION(BlueprintCallable, Category = "Ladder")
-	void AddRail() { SetRailCount(Rails + 1); }
-
-	UFUNCTION(BlueprintCallable, Category = "Ladder")
-	void RemoveRail() { SetRailCount(Rails - 1); }
-
-	UFUNCTION(BlueprintCallable, Category = "Ladder|Result")
-	void ShuffleResults();
-
-	UFUNCTION(BlueprintPure, Category = "Ladder|Result")
-	int32 GetPayout(int32 Rail) const;
+	// ─────────── Config ops (authority에서만 실제 실행) ───────────
+	UFUNCTION(BlueprintCallable, Category = "Ladder") void SetRailCount(int32 NewRails);
+	UFUNCTION(BlueprintCallable, Category = "Ladder") void AddRail()    { SetRailCount(Rails + 1); }
+	UFUNCTION(BlueprintCallable, Category = "Ladder") void RemoveRail() { SetRailCount(Rails - 1); }
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Result") void ShuffleResults();
+	UFUNCTION(BlueprintPure,     Category = "Ladder|Result") int32 GetPayout(int32 Rail) const;
 
 	// ─────────── Money ops ───────────
-	UFUNCTION(BlueprintCallable, Category = "Ladder|Money")
-	void ChangeBet(int32 Steps);
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Money") void ChangeBet(int32 Steps);
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Money") void ClampBet();
 
-	UFUNCTION(BlueprintCallable, Category = "Ladder|Money")
-	void ClampBet();
+	/** 현재 잔액 = CurrentUser 의 Currency (정수 반올림). 사용자 없으면 0. */
+	UFUNCTION(BlueprintPure, Category = "Ladder|Money") int32 GetBalance() const;
 
-	// ─────────── Nav (입력 진입점 — BP 입력/상호작용에서 호출) ───────────
-	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav")
-	void SetRailCursor(int32 NewCursor);
+	// ─────────── Nav (입력 진입점 — 내부에서 서버로 라우팅) ───────────
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav") void SetRailCursor(int32 NewCursor);
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav") void NavCycle();
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav") void NavLeft();
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav") void NavRight();
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav") void NavSelect();
+	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav") void ResetRound();
 
-	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav")
-	void NavCycle();
+	UFUNCTION(BlueprintCallable, Category = "Ladder") void BroadcastInitialState();
 
-	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav")
-	void NavLeft();
-
-	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav")
-	void NavRight();
-
-	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav")
-	void NavSelect();
-
-	/** 새 판 초기화(결과창 닫을 때). 판 비움 + 모드=레일선택 + 커서 0. */
-	UFUNCTION(BlueprintCallable, Category = "Ladder|Nav")
-	void ResetRound();
-
-	// ─────────── View callback ───────────
-	/** 위젯이 트레이스 연출을 끝냈을 때 호출 → 결과창 표시 + 최종 잔액 "표시".
-	 *  돈 정산(차감+지급)은 Play 시점에 이미 끝나 있음. 여기선 보여주기만 한다.
-	 *  (멀티: 클라 애니 타이머가 돈을 정산하면 안 되므로, 정산은 서버 Play에서 끝냄.) */
-	UFUNCTION(BlueprintCallable, Category = "Ladder")
-	void RevealFinished();
-
-	/** 뷰가 dispatcher 바인딩을 마친 뒤 1회 호출 → 현재 상태를 재방송해 초기 UI를 채운다.
-	 *  (BeginPlay 방송을 놓쳐도 되도록, 바인딩 순서에 의존하지 않게 하는 용도.) */
-	UFUNCTION(BlueprintCallable, Category = "Ladder")
-	void BroadcastInitialState();
-
-	// ─────────── Getters (뷰 레이아웃용) ───────────
-	UFUNCTION(BlueprintPure, Category = "Ladder")
-	int32 GetRails() const { return Rails; }
-
-	UFUNCTION(BlueprintPure, Category = "Ladder")
-	int32 GetRows() const { return Rows; }
+	UFUNCTION(BlueprintPure, Category = "Ladder") int32 GetRails() const { return Rails; }
+	UFUNCTION(BlueprintPure, Category = "Ladder") int32 GetRows()  const { return Rows; }
 
 protected:
 	virtual void BeginPlay() override;
 
+	// 점유 시작/해제 훅 오버라이드 — 서버에서 머신 Owner 세팅(클라 Server RPC 허용용).
+	virtual void OnMachineReady_Implementation(Acasino_simulatorCharacter* RequestingCharacter) override;
+	virtual void OnMachineReleased_Implementation(Acasino_simulatorCharacter* ReleasingCharacter) override;
+
+	// ── Server RPC (입력을 서버로) ──
+	UFUNCTION(Server, Reliable) void Server_NavCycle();
+	UFUNCTION(Server, Reliable) void Server_NavLeft();
+	UFUNCTION(Server, Reliable) void Server_NavRight();
+	UFUNCTION(Server, Reliable) void Server_NavSelect();
+	UFUNCTION(Server, Reliable) void Server_SetRailCursor(int32 NewCursor);
+	UFUNCTION(Server, Reliable) void Server_ResetRound();
+
+	// ── Multicast RPC (일회성 이벤트를 전 클라로) ──
+	UFUNCTION(NetMulticast, Reliable) void Multicast_BoardCleared();
+	UFUNCTION(NetMulticast, Reliable) void Multicast_PlayStarted(FLadderPlan Plan, int32 BalanceAfterStake);
+	UFUNCTION(NetMulticast, Reliable) void Multicast_Result(bool bWin, int32 DestRail, int32 Multiplier, int32 Winnings, int32 NewBalance);
+	UFUNCTION(NetMulticast, Reliable) void Multicast_ResultClosed();
+
+	// ── OnRep (config 동기화) ──
+	UFUNCTION() void OnRep_RailConfig();
+	UFUNCTION() void OnRep_Payouts();
+	UFUNCTION() void OnRep_Bet();
+	UFUNCTION() void OnRep_Mode();
+	UFUNCTION() void OnRep_Cursor();
+	UFUNCTION() void OnRep_DisplayBalance();
+
 private:
 	void BuildPayouts();
-	TArray<int32> RollPayouts();   // 현재 Rails용 후보 랜덤 선택 + 위치 셔플
-	void ClearBoard();
-	void Play(int32 StartRail);   // NavSelect(RailSelect) 내부 호출
+	TArray<int32> RollPayouts();
+	void ClearBoard();               // authority
+	void ServerStartPlay(int32 StartRail);   // authority
+	void ServerReveal();                     // authority, 타이머 콜백
 
-	/** 이번 판에 실제로 건 금액. */
+	void RefreshDisplayBalance();    // authority 전용: DisplayBalance = 서버 잔액 → 복제
+
 	int32 StakedThisRound = 0;
+	int32 PendingWinnings = 0;
+	FTimerHandle RevealTimerHandle;
 };

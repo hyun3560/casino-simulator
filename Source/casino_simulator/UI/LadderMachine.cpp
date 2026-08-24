@@ -1,18 +1,23 @@
-// LadderMachine.cpp
+﻿// LadderMachine.cpp  (서버 권위 버전)
 
 #include "LadderMachine.h"
+#include "casino_simulatorCharacter.h"   // GetCurrency / TrySpendCurrency / AddCurrency
+#include "Net/UnrealNetwork.h"
+#include "GameFramework/Controller.h"
+#include "TimerManager.h"
+#include "Engine/World.h"
 
 ALadderMachine::ALadderMachine()
 {
-	// 로직 액터라 매 프레임 틱 불필요. (트레이스 연출은 위젯이 담당)
 	PrimaryActorTick.bCanEverTick = false;
+	bReplicates = true;   // 설정값 리플리케이션 + RPC 사용
 
-	// 기본 배당 테이블 (합계 = 줄 개수 → 공정 EV). BP 디폴트에서 편집 가능.
+	// 기본 배당 테이블 (합계 = 줄 개수 → 공정 EV).
 	auto Add = [this](int32 R, const TArray<int32>& M)
 	{
 		FPayoutOption O; O.Rails = R; O.Multipliers = M; PayoutTable.Add(O);
 	};
-	Add(3, { 0, 0, 3 });
+	Add(3, { 3, 3, 3 });
 	Add(4, { 0, 0, 2, 2 });
 	Add(4, { 0, 0, 0, 4 });
 	Add(4, { 0, 0, 1, 3 });
@@ -21,12 +26,48 @@ ALadderMachine::ALadderMachine()
 	Add(5, { 0, 0, 0, 2, 3 });
 }
 
+void ALadderMachine::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ALadderMachine, Rails);
+	DOREPLIFETIME(ALadderMachine, Rows);
+	DOREPLIFETIME(ALadderMachine, Payouts);
+	DOREPLIFETIME(ALadderMachine, BetAmount);
+	DOREPLIFETIME(ALadderMachine, Mode);
+	DOREPLIFETIME(ALadderMachine, RailCursor);
+	DOREPLIFETIME(ALadderMachine, DisplayBalance);
+}
+
 void ALadderMachine::BeginPlay()
 {
 	Super::BeginPlay();
+	if (HasAuthority())
+	{
+		SetRailCount(Rails);   // 서버가 초기 판 세팅 → 클라로 리플리케이트
+	}
+}
 
-	// 판 초기화: 기본 줄개수로 Rows/배당 세팅. (초기 UI 방송은 BP가 바인딩 후 BroadcastInitialState 호출)
-	SetRailCount(Rails);
+// 점유 시작: 서버에서 머신 Owner 를 앉은 클라 컨트롤러로 → 그 클라의 Server RPC 허용.
+void ALadderMachine::OnMachineReady_Implementation(Acasino_simulatorCharacter* RequestingCharacter)
+{
+	Super::OnMachineReady_Implementation(RequestingCharacter);
+	if (HasAuthority() && RequestingCharacter)
+	{
+		SetOwner(RequestingCharacter->GetController());
+		// 서버가 확정 잔액을 DisplayBalance 로 → 복제되어 전 클라(앉은 클라 포함)가 동일 표시.
+		RefreshDisplayBalance();
+	}
+}
+
+void ALadderMachine::OnMachineReleased_Implementation(Acasino_simulatorCharacter* ReleasingCharacter)
+{
+	Super::OnMachineReleased_Implementation(ReleasingCharacter);
+	if (HasAuthority())
+	{
+		SetOwner(nullptr);
+		DisplayBalance = 0;   // 자리 비면 0 → 복제
+		OnRep_DisplayBalance();
+	}
 }
 
 void ALadderMachine::BroadcastInitialState()
@@ -36,51 +77,48 @@ void ALadderMachine::BroadcastInitialState()
 	OnModeChanged.Broadcast(Mode);
 	OnCursorChanged.Broadcast(RailCursor);
 	OnBetChanged.Broadcast(BetAmount);
-	OnBalanceChanged.Broadcast(Balance);
+	OnBalanceChanged.Broadcast(DisplayBalance);   // 로컬 GetBalance() 대신 복제값 사용
 	OnBoardCleared.Broadcast();
 }
 
-// ─────────── Config ops ───────────
+// ─────────── Config ops (authority) ───────────
 
 void ALadderMachine::SetRailCount(int32 NewRails)
 {
-	Rails = FMath::Clamp(NewRails, MinRails, MaxRails);
-	Rows  = FMath::Max(Rails * RowsPerRail, 2);   // 세로줄 수에 비례해 행도 변함
+	if (!HasAuthority()) return;
 
+	Rails = FMath::Clamp(NewRails, MinRails, MaxRails);
+	Rows  = FMath::Max(Rails * RowsPerRail, 2);
 	RailCursor = FMath::Clamp(RailCursor, 0, Rails - 1);
 
-	ClearBoard();       // 개수 바뀌면 판 비우고 세로줄만 (OnBoardCleared 방송 포함)
-	BuildPayouts();     // 배당 배열 개수 맞춰 재구성
+	ClearBoard();       // 판 비움 (Multicast_BoardCleared)
+	BuildPayouts();     // 배당 재구성
 
-	OnRailCountChanged.Broadcast(Rails);   // BP: 버튼/결과칸 재생성
-	OnResultsChanged.Broadcast();          // BP: 결과 슬롯 텍스트 갱신
-	OnCursorChanged.Broadcast(RailCursor); // 커서 하이라이트 갱신
+	OnRep_RailConfig(); // 호스트 로컬 UI (클라는 리플리케이션으로 각자 OnRep)
+	OnRep_Payouts();
+	OnRep_Cursor();
 }
 
 void ALadderMachine::BuildPayouts()
 {
-	Payouts = RollPayouts();   // 현재 Rails용 후보 뽑고 위치 셔플
+	Payouts = RollPayouts();
 }
 
 void ALadderMachine::ShuffleResults()
 {
-	Payouts = RollPayouts();   // 리롤: 후보 다시 뽑고(다른 분포 가능) 위치도 셔플
-	OnResultsChanged.Broadcast();
+	if (!HasAuthority()) return;
+	Payouts = RollPayouts();
+	OnRep_Payouts();
 }
 
 TArray<int32> ALadderMachine::RollPayouts()
 {
-	// 1) 현재 Rails에 해당하는 후보 항목들 수집
 	TArray<int32> MatchIdx;
 	for (int32 i = 0; i < PayoutTable.Num(); ++i)
 	{
-		if (PayoutTable[i].Rails == Rails)
-		{
-			MatchIdx.Add(i);
-		}
+		if (PayoutTable[i].Rails == Rails) { MatchIdx.Add(i); }
 	}
 
-	// 2) 후보 하나 랜덤 선택 (없으면 BasePayouts 폴백)
 	TArray<int32> Result;
 	if (MatchIdx.Num() > 0)
 	{
@@ -95,15 +133,12 @@ TArray<int32> ALadderMachine::RollPayouts()
 		}
 	}
 
-	// 3) 길이 보정 (모자라면 0으로 채우고 넘치면 자름)
 	Result.SetNum(Rails);
 
-	// 4) 위치 셔플 (어느 줄이 어느 배당인지 섞기, Fisher-Yates)
 	for (int32 i = Result.Num() - 1; i > 0; --i)
 	{
 		Result.Swap(i, FMath::RandRange(0, i));
 	}
-
 	return Result;
 }
 
@@ -112,158 +147,267 @@ int32 ALadderMachine::GetPayout(int32 Rail) const
 	return Payouts.IsValidIndex(Rail) ? Payouts[Rail] : 0;
 }
 
-// ─────────── Money ops ───────────
+// ─────────── Money ───────────
+
+int32 ALadderMachine::GetBalance() const
+{
+	if (const Acasino_simulatorCharacter* User = GetCurrentUser())
+	{
+		return FMath::RoundToInt(User->GetCurrency());
+	}
+	return 0;
+}
 
 void ALadderMachine::ClampBet()
 {
-	const int32 MaxBet = FMath::Max(Balance, BetStep);   // 잔액까지만 (최소 BetStep)
+	if (!HasAuthority()) return;
+	const int32 MaxBet = FMath::Max(GetBalance(), BetStep);
 	BetAmount = FMath::Clamp(BetAmount, BetStep, MaxBet);
-	OnBetChanged.Broadcast(BetAmount);
+	OnRep_Bet();
 }
 
 void ALadderMachine::ChangeBet(int32 Steps)
 {
+	if (!HasAuthority()) return;
 	BetAmount += Steps * BetStep;
 	ClampBet();
 }
 
-// ─────────── Nav ───────────
+// ─────────── Nav (입력 진입점 — 서버 라우팅) ───────────
 
 void ALadderMachine::SetRailCursor(int32 NewCursor)
 {
+	if (!HasAuthority()) { Server_SetRailCursor(NewCursor); return; }
 	RailCursor = FMath::Clamp(NewCursor, 0, Rails - 1);
-	OnCursorChanged.Broadcast(RailCursor);
+	OnRep_Cursor();
 }
+void ALadderMachine::Server_SetRailCursor_Implementation(int32 NewCursor) { SetRailCursor(NewCursor); }
 
 void ALadderMachine::NavCycle()
 {
-	if (bResultOpen) return;   // 결과창 열림 중엔 입력 무시
-
+	if (!HasAuthority()) { Server_NavCycle(); return; }
+	if (bResultOpen) return;
 	const uint8 Next = (static_cast<uint8>(Mode) + 1) % 4;
 	Mode = static_cast<ELadderMode>(Next);
-	OnModeChanged.Broadcast(Mode);
+	OnRep_Mode();
 }
+void ALadderMachine::Server_NavCycle_Implementation() { NavCycle(); }
 
 void ALadderMachine::NavLeft()
 {
-	if (bResultOpen) return;   // 결과창 열림 중엔 입력 무시
-
+	if (!HasAuthority()) { Server_NavLeft(); return; }
+	if (bResultOpen) return;
 	switch (Mode)
 	{
-	case ELadderMode::RailSelect: SetRailCursor(RailCursor - 1); break;   // 왼쪽 줄
-	case ELadderMode::RailCount:  RemoveRail();                  break;   // 줄 하나 줄임(커서 클램프/방송 포함)
+	case ELadderMode::RailSelect: SetRailCursor(RailCursor - 1); break;
+	case ELadderMode::RailCount:  RemoveRail();                  break;
 	case ELadderMode::Bet:        ChangeBet(-1);                 break;
-	default: break;                                                       // 새로고침: 좌우 없음
+	default: break;
 	}
 }
+void ALadderMachine::Server_NavLeft_Implementation() { NavLeft(); }
 
 void ALadderMachine::NavRight()
 {
-	if (bResultOpen) return;   // 결과창 열림 중엔 입력 무시
-
+	if (!HasAuthority()) { Server_NavRight(); return; }
+	if (bResultOpen) return;
 	switch (Mode)
 	{
-	case ELadderMode::RailSelect: SetRailCursor(RailCursor + 1); break;   // 오른쪽 줄
-	case ELadderMode::RailCount:  AddRail();                     break;   // 줄 하나 늘림
+	case ELadderMode::RailSelect: SetRailCursor(RailCursor + 1); break;
+	case ELadderMode::RailCount:  AddRail();                     break;
 	case ELadderMode::Bet:        ChangeBet(1);                  break;
 	default: break;
 	}
 }
+void ALadderMachine::Server_NavRight_Implementation() { NavRight(); }
 
 void ALadderMachine::NavSelect()
 {
-	if (bResultOpen) return;   // 결과창 열림 중엔 입력 무시
+	if (!HasAuthority())
+	{
+		// 클라 즉시 피드백(잔액부족). 권위 검증은 서버가 다시 함.
+		// 클라는 로컬 Currency 를 못 읽으므로 복제된 DisplayBalance 로 예측 판단.
+		if (!bIsPlaying && Mode == ELadderMode::RailSelect && DisplayBalance < BetAmount)
+		{
+			OnInsufficientFunds.Broadcast();
+		}
+		Server_NavSelect();
+		return;
+	}
+
+	if (bResultOpen) return;
 
 	switch (Mode)
 	{
 	case ELadderMode::RailSelect:
-		if (!bIsPlaying)                          // 트레이스 중이면 무시
+		if (!bIsPlaying)
 		{
-			if (Balance >= BetAmount)             // 잔액 충분 → 시작
-			{
-				Play(RailCursor);
-			}
-			else
-			{
-				OnInsufficientFunds.Broadcast();  // 잔액 부족
-			}
+			if (GetBalance() >= BetAmount) { ServerStartPlay(RailCursor); }
+			else                           { OnInsufficientFunds.Broadcast(); }
 		}
 		break;
 
 	case ELadderMode::Refresh:
-		ClearBoard();       // 판 비우기 → 세로줄만
-		ShuffleResults();   // 배당 셔플
+		ClearBoard();
+		ShuffleResults();
 		break;
 
-	default:
-		break;              // 줄개수/배팅 모드: 선택 동작 없음
+	default: break;
 	}
 }
+void ALadderMachine::Server_NavSelect_Implementation() { NavSelect(); }
 
 void ALadderMachine::ResetRound()
 {
+	if (!HasAuthority()) { Server_ResetRound(); return; }
+
 	const bool bWasResultOpen = bResultOpen;
+	bResultOpen = false;
 
-	bResultOpen = false;              // 결과창 닫힘 → Nav 입력 다시 허용
-	ClearBoard();                     // 판 비움(+OnBoardCleared)
+	ClearBoard();
 	Mode = ELadderMode::RailSelect;
-	OnModeChanged.Broadcast(Mode);
-	SetRailCursor(0);                 // 커서 0 (+OnCursorChanged)
-	ClampBet();                       // 잔액 줄었으면 배팅액 맞춤 (+OnBetChanged)
+	OnRep_Mode();
+	SetRailCursor(0);
+	ClampBet();
 
-	if (bWasResultOpen)
-	{
-		OnResultClosed.Broadcast();   // 스크린: 결과창 숨기기 + 배경 딤 해제
-	}
+	if (bWasResultOpen) { Multicast_ResultClosed(); }
 }
+void ALadderMachine::Server_ResetRound_Implementation() { ResetRound(); }
 
-// ─────────── Play / Settle ───────────
+// ─────────── Play / Settle (authority) ───────────
 
-void ALadderMachine::Play(int32 StartRail)
+void ALadderMachine::ServerStartPlay(int32 StartRail)
 {
-	if (Rails < 2 || Rows < 2)
+	if (!HasAuthority()) return;
+	if (Rails < 2 || Rows < 2) return;
+	if (bIsPlaying) return;
+
+	// (1) 스테이크 차감 (서버 권위)
+	StakedThisRound = FMath::Min(BetAmount, GetBalance());
+	if (Acasino_simulatorCharacter* User = GetCurrentUser())
 	{
-		return;
+		User->TrySpendCurrency(static_cast<float>(StakedThisRound));
 	}
+	RefreshDisplayBalance();   // 스테이크 차감 반영
 
-	// (1) 스테이크 차감 — 즉시 표시 (돈 내고 시작하는 거라 스포일러 아님)
-	StakedThisRound = FMath::Min(BetAmount, Balance);
-	Balance -= StakedThisRound;
-	OnBalanceChanged.Broadcast(Balance);
-
-	// (2) 결과 확정 (순수 생성기)
+	// (2) 결과 확정 (서버 RNG)
 	CurrentPlan = ULadderGenerator::Generate(Rails, Rows, StartRail, Payouts, FakeRungChance);
+	PendingWinnings = StakedThisRound * CurrentPlan.Payout;
 
-	// (3) 정산까지 여기서 끝냄 — 당첨금을 내부 Balance에 바로 반영.
-	//     단 잔액 "표시"는 아직 방송하지 않는다(공이 떨어지기 전 스포일러 방지).
-	//     내부 Balance는 최종값(멀티에선 서버 권위값). 표시는 RevealFinished 에서.
-	const int32 Winnings = StakedThisRound * CurrentPlan.Payout;
-	Balance += Winnings;
+	bIsPlaying   = true;
+	bResultOpen  = false;
 
-	bIsPlaying = true;
-	OnPlayStarted.Broadcast(CurrentPlan);   // 위젯이 트레이스 시작
+	// (3) 스크립트 배포 — 전 클라가 이 Plan 으로 트레이스 시작. 스테이크 반영된 잔액도 전달.
+	Multicast_PlayStarted(CurrentPlan, GetBalance());
+
+	// (4) 서버 타이머: 트레이스 길이 후 정산.
+	GetWorldTimerManager().SetTimer(
+		RevealTimerHandle, this, &ALadderMachine::ServerReveal,
+		FMath::Max(TraceDuration, 0.01f), false);
 }
 
-void ALadderMachine::RevealFinished()
+void ALadderMachine::ServerReveal()
 {
-	if (!bIsPlaying)
-	{
-		return;   // 진행 중인 판이 없으면 무시 (중복 방지)
-	}
-	bIsPlaying = false;
-	bResultOpen = true;   // 결과창 열림 → 이 동안 Nav 입력 차단
+	if (!HasAuthority()) return;
+	if (!bIsPlaying) return;
 
-	// 돈은 Play에서 이미 정산됨. 여기선 최종 잔액 "표시" + 결과창만.
-	const int32 Winnings = StakedThisRound * CurrentPlan.Payout;
-	OnBalanceChanged.Broadcast(Balance);   // 이제 당첨금 반영된 최종 잔액 표시
-	OnResult.Broadcast(CurrentPlan.bWin, CurrentPlan.DestRail, CurrentPlan.Payout, Winnings);
+	// 구슬 도착 시점 = 당첨금 지급 (서버 권위)
+	if (PendingWinnings > 0)
+	{
+		if (Acasino_simulatorCharacter* User = GetCurrentUser())
+		{
+			User->AddCurrency(static_cast<float>(PendingWinnings));
+		}
+	}
+	RefreshDisplayBalance();   // 당첨금 반영
+
+	bIsPlaying  = false;
+	bResultOpen = true;
+
+	// 결과 배포 — 당첨금 반영된 최종 잔액도 같이.
+	Multicast_Result(CurrentPlan.bWin, CurrentPlan.DestRail, CurrentPlan.Payout, PendingWinnings, GetBalance());
+}
+
+// ─────────── Multicast 구현 (서버 + 전 클라에서 실행) ───────────
+
+void ALadderMachine::Multicast_BoardCleared_Implementation()
+{
+	CurrentPlan = FLadderPlan();
+	bIsPlaying  = false;
+	OnBoardCleared.Broadcast();
+}
+
+void ALadderMachine::Multicast_PlayStarted_Implementation(FLadderPlan Plan, int32 BalanceAfterStake)
+{
+	CurrentPlan = Plan;
+	bIsPlaying  = true;
+	bResultOpen = false;
+	OnBalanceChanged.Broadcast(BalanceAfterStake);   // 스테이크 반영 잔액 표시
+	OnPlayStarted.Broadcast(Plan);                   // 위젯 트레이스 시작
+}
+
+void ALadderMachine::Multicast_Result_Implementation(bool bWin, int32 DestRail, int32 Multiplier, int32 Winnings, int32 NewBalance)
+{
+	bIsPlaying  = false;
+	bResultOpen = true;
+	OnBalanceChanged.Broadcast(NewBalance);          // 당첨금 반영 최종 잔액
+	OnResult.Broadcast(bWin, DestRail, Multiplier, Winnings);
+}
+
+void ALadderMachine::Multicast_ResultClosed_Implementation()
+{
+	bResultOpen = false;
+	OnResultClosed.Broadcast();
+}
+
+// ─────────── OnRep (config 동기화) ───────────
+
+void ALadderMachine::OnRep_RailConfig()
+{
+	OnRailCountChanged.Broadcast(Rails);
+	OnCursorChanged.Broadcast(RailCursor);
+}
+
+void ALadderMachine::OnRep_Payouts()
+{
+	OnResultsChanged.Broadcast();
+}
+
+void ALadderMachine::OnRep_Bet()
+{
+	OnBetChanged.Broadcast(BetAmount);
+}
+
+void ALadderMachine::OnRep_Mode()
+{
+	OnModeChanged.Broadcast(Mode);
+}
+
+void ALadderMachine::OnRep_Cursor()
+{
+	OnCursorChanged.Broadcast(RailCursor);
+}
+
+void ALadderMachine::OnRep_DisplayBalance()
+{
+	OnBalanceChanged.Broadcast(DisplayBalance);
+}
+
+// authority 전용: 서버의 실제 잔액을 복제 변수에 기록.
+// 호스트는 자기 변경에 OnRep 이 안 오므로 수동 호출로 로컬 UI 갱신.
+void ALadderMachine::RefreshDisplayBalance()
+{
+	if (!HasAuthority()) return;
+	DisplayBalance = GetBalance();
+	OnRep_DisplayBalance();
 }
 
 // ─────────── helpers ───────────
 
 void ALadderMachine::ClearBoard()
 {
+	if (!HasAuthority()) return;
 	CurrentPlan = FLadderPlan();
-	bIsPlaying = false;
-	OnBoardCleared.Broadcast();   // 위젯: 가로줄/트레이스 제거 → 세로줄만
+	bIsPlaying  = false;
+	Multicast_BoardCleared();   // 서버 + 전 클라 판 비움 + OnBoardCleared
 }
