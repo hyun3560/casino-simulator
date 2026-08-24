@@ -5,6 +5,7 @@
 #include "SeatedMachineBase.generated.h"
 
 class Acasino_simulatorCharacter;
+class UCameraComponent;
 class UStaticMeshComponent;
 
 UENUM(BlueprintType)
@@ -36,6 +37,15 @@ public:
 	// �� �ӽſ��� ������ ��û
 	UFUNCTION(BlueprintCallable, Category = "Machine|Interaction")
 	void RequestReleaseMachine(Acasino_simulatorCharacter* RequestingCharacter);
+
+	UFUNCTION(BlueprintCallable, Category = "Machine|Interaction")
+	void HandleMachinePrimaryInput(Acasino_simulatorCharacter* RequestingCharacter);
+
+	UFUNCTION(BlueprintCallable, Category = "Machine|Interaction")
+	void SetCanExitMachine(bool bCanExit);
+
+	UFUNCTION(BlueprintPure, Category = "Machine|Interaction")
+	bool CanExitMachine() const { return bCanExitMachine; }
 
 	//�ӽ� ��뿩�� ��ȸ
 	UFUNCTION(BlueprintPure, Category = "Machine|State")
@@ -69,6 +79,22 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Machine|Components")
 	TObjectPtr<USceneComponent> CameraPoint;
 
+	// Camera used while the player is operating this machine.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Machine|Components")
+	TObjectPtr<UCameraComponent> MachineCamera;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Machine|Seat")
+	bool bMoveUserToSeatOnUse = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Machine|Seat")
+	bool bDisableUserMovementOnUse = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Machine|Seat", meta = (ClampMin = "0.0"))
+	float MachineCameraBlendTime = 0.35f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Machine|Seat", meta = (ClampMin = "0.0"))
+	float ReleaseCameraBlendTime = 0.25f;
+
 	// ���� �� �ӽ��� ���� �÷��̾�
 	UPROPERTY(ReplicatedUsing = OnRep_CurrentUser, BlueprintReadOnly, Category = "Machine|State")
 	TObjectPtr<Acasino_simulatorCharacter> CurrentUser;
@@ -76,6 +102,9 @@ protected:
 	// ���� ������ ��������
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Machine|State")
 	bool bCanOperate = false;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Machine|State")
+	bool bCanExitMachine = true;
 
 	//�ѤѤѤѤѤѤѤѤѤѤѤѤѤѤѤѤѤѤ�RPC�ѤѤѤѤѤѤѤѤѤѤѤѤѤѤѤѤѤѤѤѤѤѤ�
 	// RPC : Remote Procedure Call - �ָ� �ִ� ��ǻ�Ϳ��� �Լ��� �����Ű�� ��
@@ -87,6 +116,12 @@ protected:
 	// Ŭ���̾�Ʈ�� �������� �ش� �ӽ� ������ ��û �Լ� *���� ����ڰ� �´��� �˻�
 	UFUNCTION(Server, Reliable)
 	void Server_ReleaseMachine(Acasino_simulatorCharacter* RequestingCharacter);
+
+	UFUNCTION(Server, Reliable)
+	void Server_HandleMachinePrimaryInput(Acasino_simulatorCharacter* RequestingCharacter);
+
+	UFUNCTION(Server, Reliable)
+	void Server_SetCanExitMachine(bool bCanExit);
 
 	// ������ Ŭ���̾�Ʈ���� �÷��̾��� �ӽ� ��� ������ �˸��� �Լ�
 	UFUNCTION(NetMulticast, Reliable)
@@ -116,7 +151,18 @@ protected:
 	void OnMachineUseRejected(Acasino_simulatorCharacter* RequestingCharacter, ESeatedMachineUseResult Result);
 	virtual void OnMachineUseRejected_Implementation(Acasino_simulatorCharacter* RequestingCharacter, ESeatedMachineUseResult Result);
 
+	UFUNCTION(BlueprintNativeEvent, Category = "Machine|Input")
+	void OnMachinePrimaryInput(Acasino_simulatorCharacter* RequestingCharacter);
+	virtual void OnMachinePrimaryInput_Implementation(Acasino_simulatorCharacter* RequestingCharacter);
+
+	UFUNCTION(BlueprintNativeEvent, Category = "Machine|Interaction")
+	void OnMachineExitRejected(Acasino_simulatorCharacter* RequestingCharacter);
+	virtual void OnMachineExitRejected_Implementation(Acasino_simulatorCharacter* RequestingCharacter);
+
 private:
 	// ���� ���ο��� ��� ���� ���� �Ǵ�
 	ESeatedMachineUseResult CanAcceptUser(Acasino_simulatorCharacter* RequestingCharacter) const;
+
+	void EnterMachineUseView(Acasino_simulatorCharacter* RequestingCharacter);
+	void ExitMachineUseView(Acasino_simulatorCharacter* ReleasingCharacter);
 };

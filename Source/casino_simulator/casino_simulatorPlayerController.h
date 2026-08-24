@@ -156,11 +156,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Interaction")
 	void InteractWithCurrentTarget();
 
+	UFUNCTION(BlueprintCallable, Category="Machine|Interaction")
+	void ExitCurrentMachine();
+
 	UFUNCTION(BlueprintCallable, Category="Interaction")
 	bool OpenWorldInteraction(const FText& PromptText);
 
 	UFUNCTION(BlueprintCallable, Category="Interaction")
 	void CloseWorldInteraction();
+
+	UFUNCTION(BlueprintCallable, Category="Interaction")
+	void SetWorldInteractionPromptControls(bool bPrimaryVisible, bool bExitVisible);
 
 	UFUNCTION(BlueprintPure, Category="Interaction")
 	bool IsInteractionUIOpen() const { return bInteractionUIOpen; }

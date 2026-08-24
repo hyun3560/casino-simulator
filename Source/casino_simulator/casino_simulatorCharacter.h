@@ -18,6 +18,7 @@ class Ucasino_simulatorAttributeSet;
 class UCasinoShopComponent;
 class UWorldInteractionDetectorComponent;
 class UGameplayEffect;
+class ASeatedMachineBase;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -47,6 +48,10 @@ protected:
 	/** Interact Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	UInputAction* InteractAction;
+
+	/** Machine Exit Input Action */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	UInputAction* MachineExitAction;
 
 	/** Move Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
@@ -87,6 +92,9 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
 	FActiveGameplayEffectHandle AttributeDecayEffectHandle;
 
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Machine|Interaction", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<ASeatedMachineBase> CurrentSeatedMachine;
+
 	/** Walking speed at full Nicotine (ratio = 1). CharacterMovementComponent's MaxWalkSpeed is scaled from this as Nicotine depletes. */
 	UPROPERTY(EditAnywhere, Category="Abilities", meta = (AllowPrivateAccess = "true"))
 	float MaxMoveSpeed = 600.0f;
@@ -120,6 +128,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Economy|Currency")
 	float GetCurrency() const;
+
+	UFUNCTION(BlueprintPure, Category = "Machine|Interaction")
+	ASeatedMachineBase* GetCurrentSeatedMachine() const { return CurrentSeatedMachine; }
+
+	UFUNCTION(BlueprintPure, Category = "Machine|Interaction")
+	bool IsUsingSeatedMachine() const { return CurrentSeatedMachine != nullptr; }
+
+	void SetCurrentSeatedMachine(ASeatedMachineBase* NewMachine);
+	void ClearCurrentSeatedMachine(ASeatedMachineBase* MachineToClear);
 
 protected:
 
@@ -157,6 +174,8 @@ protected:
 
 	/** Called from Input Actions for interaction input */
 	void InteractInput(const FInputActionValue& Value);
+
+	void MachineExitInput();
 
 	/** Handles aim inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")

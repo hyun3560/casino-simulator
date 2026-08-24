@@ -11,6 +11,7 @@
 #include "AbilitySystemComponent.h"
 #include "Economy/CasinoShopComponent.h"
 #include "Interaction/WorldInteractionDetectorComponent.h"
+#include "Machine/SeatedMachineBase.h"
 #include "casino_simulatorPlayerController.h"
 #include "casino_simulatorAttributeSet.h"
 #include "casino_simulator.h"
@@ -119,6 +120,19 @@ float Acasino_simulatorCharacter::GetCurrency() const
 	return AbilitySystemComponent->GetNumericAttribute(
 		Ucasino_simulatorAttributeSet::GetCurrencyAttribute()
 	);
+}
+
+void Acasino_simulatorCharacter::SetCurrentSeatedMachine(ASeatedMachineBase* NewMachine)
+{
+	CurrentSeatedMachine = NewMachine;
+}
+
+void Acasino_simulatorCharacter::ClearCurrentSeatedMachine(ASeatedMachineBase* MachineToClear)
+{
+	if (!MachineToClear || CurrentSeatedMachine == MachineToClear)
+	{
+		CurrentSeatedMachine = nullptr;
+	}
 }
 
 void Acasino_simulatorCharacter::PossessedBy(AController* NewController)
@@ -269,6 +283,11 @@ void Acasino_simulatorCharacter::SetupPlayerInputComponent(UInputComponent* Play
 			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &Acasino_simulatorCharacter::InteractInput);
 		}
 
+		if (MachineExitAction)
+		{
+			EnhancedInputComponent->BindAction(MachineExitAction, ETriggerEvent::Started, this, &Acasino_simulatorCharacter::MachineExitInput);
+		}
+
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &Acasino_simulatorCharacter::MoveInput);
 
@@ -325,6 +344,14 @@ void Acasino_simulatorCharacter::InteractInput(const FInputActionValue& Value)
 	if (Acasino_simulatorPlayerController* PC = Cast<Acasino_simulatorPlayerController>(GetController()))
 	{
 		PC->InteractWithCurrentTarget();
+	}
+}
+
+void Acasino_simulatorCharacter::MachineExitInput()
+{
+	if (Acasino_simulatorPlayerController* PC = Cast<Acasino_simulatorPlayerController>(GetController()))
+	{
+		PC->ExitCurrentMachine();
 	}
 }
 
