@@ -10,6 +10,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "AbilitySystemComponent.h"
 #include "Economy/CasinoShopComponent.h"
+#include "Interaction/WorldInteractionDetectorComponent.h"
 #include "casino_simulatorPlayerController.h"
 #include "casino_simulatorAttributeSet.h"
 #include "casino_simulator.h"
@@ -58,6 +59,7 @@ Acasino_simulatorCharacter::Acasino_simulatorCharacter()
 	AttributeSet = CreateDefaultSubobject<Ucasino_simulatorAttributeSet>(TEXT("AttributeSet"));
 
 	ShopComponent = CreateDefaultSubobject<UCasinoShopComponent>(TEXT("ShopComponent"));
+	WorldInteractionDetector = CreateDefaultSubobject<UWorldInteractionDetectorComponent>(TEXT("WorldInteractionDetector"));
 }
 
 UAbilitySystemComponent* Acasino_simulatorCharacter::GetAbilitySystemComponent() const

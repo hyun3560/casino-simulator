@@ -40,4 +40,5 @@ public:
 	void BP_OpenInterection();
 	UFUNCTION(BlueprintImplementableEvent, Category = "HUD", meta = (DisplayName = "Close Interection"))
 	void BP_CloseInterection();
+
 };

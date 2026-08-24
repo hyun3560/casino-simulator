@@ -16,6 +16,7 @@ class UInputAction;
 class UAbilitySystemComponent;
 class Ucasino_simulatorAttributeSet;
 class UCasinoShopComponent;
+class UWorldInteractionDetectorComponent;
 class UGameplayEffect;
 struct FInputActionValue;
 
@@ -75,6 +76,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Shop", meta = (AllowPrivateAccess = "true"))
 	UCasinoShopComponent* ShopComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Interaction", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UWorldInteractionDetectorComponent> WorldInteractionDetector;
+
 	/** Infinite periodic GameplayEffect (typically a Blueprint) that decays Nicotine/Alcohol over time. Applied once, server-side. */
 	UPROPERTY(EditDefaultsOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UGameplayEffect> AttributeDecayEffectClass;
@@ -104,6 +108,9 @@ public:
 	/** Returns the shop component used by shop/exchange UI blueprints **/
 	UFUNCTION(BlueprintPure, Category="Shop")
 	UCasinoShopComponent* GetShopComponent() const { return ShopComponent; }
+
+	UFUNCTION(BlueprintPure, Category="Interaction")
+	UWorldInteractionDetectorComponent* GetWorldInteractionDetector() const { return WorldInteractionDetector; }
 
 	UFUNCTION(BlueprintCallable, Category = "Economy|Currency")
 	bool TrySpendCurrency(float Amount);

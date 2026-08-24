@@ -1,7 +1,6 @@
 #include "Machine/SeatedMachineBase.h"
 
 #include "Components/SceneComponent.h"
-#include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "casino_simulatorCharacter.h"
@@ -9,16 +8,13 @@
 ASeatedMachineBase::ASeatedMachineBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
-	bReplicates = true; // ÀÌ ¾×ÅÍ°¡ ³×Æ®¿öÅ© º¹Á¦ ´ë»óÀÌ¶ó´Â ¶æ
+	bReplicates = true; // ï¿½ï¿½ ï¿½ï¿½ï¿½Í°ï¿½ ï¿½ï¿½Æ®ï¿½ï¿½Å© ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ì¶ï¿½ï¿½ ï¿½ï¿½
 
-	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
-	SetRootComponent(SceneRoot);
-
-	// ÀÇÀÚ¿ë StaticMeshComponent¸¦ »ý¼ºÇÏ´Â ÁÙ
+	// ï¿½ï¿½ï¿½Ú¿ï¿½ StaticMeshComponentï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ ï¿½ï¿½
 	ChairMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ChairMesh"));
-	// ChairMesh¸¦ SceneRoot ¹Ø¿¡ ºÙÀÌ´Â ÁÙ
+	// ChairMeshï¿½ï¿½ SceneRoot ï¿½Ø¿ï¿½ ï¿½ï¿½ï¿½Ì´ï¿½ ï¿½ï¿½
 	ChairMesh->SetupAttachment(SceneRoot);
-	// ÀÇÀÚÀÇ Ãæµ¹ ¼³Á¤À» Á¤ÇÏ´Â ÁÙ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½æµ¹ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ï´ï¿½ ï¿½ï¿½
 	ChairMesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
 
 	SeatPoint = CreateDefaultSubobject<USceneComponent>(TEXT("SeatPoint"));
@@ -27,20 +23,6 @@ ASeatedMachineBase::ASeatedMachineBase()
 	CameraPoint = CreateDefaultSubobject<USceneComponent>(TEXT("CameraPoint"));
 	CameraPoint->SetupAttachment(SceneRoot);
 
-	InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
-	InteractionSphere->SetupAttachment(SceneRoot);
-	InteractionSphere->InitSphereRadius(InteractionRadius);
-	InteractionSphere->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
-}
-
-void ASeatedMachineBase::BeginPlay()
-{
-	Super::BeginPlay();
-
-	if (InteractionSphere)
-	{
-		InteractionSphere->SetSphereRadius(InteractionRadius);
-	}
 }
 
 void ASeatedMachineBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -76,6 +58,12 @@ void ASeatedMachineBase::RequestReleaseMachine(Acasino_simulatorCharacter* Reque
 bool ASeatedMachineBase::CanOperate(Acasino_simulatorCharacter* RequestingCharacter) const
 {
 	return bCanOperate && CurrentUser && CurrentUser == RequestingCharacter;
+}
+
+bool ASeatedMachineBase::CanInteract(Acasino_simulatorCharacter* RequestingCharacter) const
+{
+	return Super::CanInteract(RequestingCharacter)
+		&& (!CurrentUser || CurrentUser == RequestingCharacter);
 }
 
 void ASeatedMachineBase::Server_RequestUseMachine_Implementation(Acasino_simulatorCharacter* RequestingCharacter)
