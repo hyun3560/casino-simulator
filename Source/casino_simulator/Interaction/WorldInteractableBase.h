@@ -43,9 +43,6 @@ protected:
 	TObjectPtr<USphereComponent> InteractionSphere;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "World Interaction")
-	float InteractionFacingDotThreshold = 0.75f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "World Interaction")
 	FText InteractionPromptText;
 
 	UFUNCTION()

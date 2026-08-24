@@ -42,16 +42,14 @@ bool AWorldInteractableBase::CanInteract(Acasino_simulatorCharacter* Interacting
 		return false;
 	}
 
-	const FVector ToTarget = GetActorLocation() - InteractingCharacter->GetActorLocation();
 	const float MaxDistance = InteractionSphere ? InteractionSphere->GetScaledSphereRadius() + 50.0f : 0.0f;
-	if (ToTarget.SizeSquared() > FMath::Square(MaxDistance))
+	if (MaxDistance <= 0.0f)
 	{
 		return false;
 	}
 
-	const FVector DirectionToTarget = ToTarget.GetSafeNormal();
-	const float FacingDot = FVector::DotProduct(InteractingCharacter->GetActorForwardVector(), DirectionToTarget);
-	return FacingDot >= InteractionFacingDotThreshold;
+	const FVector ToCharacter = InteractingCharacter->GetActorLocation() - GetActorLocation();
+	return ToCharacter.SizeSquared() <= FMath::Square(MaxDistance);
 }
 
 void AWorldInteractableBase::OnInteractionSphereBeginOverlap(

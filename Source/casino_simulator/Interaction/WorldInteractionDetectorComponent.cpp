@@ -3,6 +3,7 @@
 #include "Interaction/WorldInteractableBase.h"
 #include "casino_simulatorCharacter.h"
 #include "casino_simulatorPlayerController.h"
+#include "Camera/CameraComponent.h"
 
 UWorldInteractionDetectorComponent::UWorldInteractionDetectorComponent()
 {
@@ -89,10 +90,29 @@ void UWorldInteractionDetectorComponent::UpdateFocusedTarget()
 	});
 
 	AWorldInteractableBase* BestTarget = nullptr;
-	float BestDot = -1.0f;
 
-	const FVector OwnerLocation = OwnerCharacter->GetActorLocation();
-	const FVector OwnerForward = OwnerCharacter->GetActorForwardVector();
+	FVector TraceStart = OwnerCharacter->GetActorLocation();
+	FVector TraceDirection = OwnerCharacter->GetActorForwardVector();
+
+	if (UCameraComponent* FirstPersonCamera = OwnerCharacter->GetFirstPersonCameraComponent())
+	{
+		TraceStart = FirstPersonCamera->GetComponentLocation();
+		TraceDirection = FirstPersonCamera->GetForwardVector();
+	}
+
+	constexpr float TraceDistance = 1000.0f;
+	const FVector TraceEnd = TraceStart + TraceDirection * TraceDistance;
+
+	FHitResult Hit;
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(WorldInteractionTrace), false);
+	QueryParams.AddIgnoredActor(OwnerCharacter);
+
+	if (UWorld* World = OwnerCharacter->GetWorld())
+	{
+		World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+	}
+
+	AActor* HitActor = Hit.GetActor();
 
 	for (AWorldInteractableBase* Candidate : NearbyTargets)
 	{
@@ -101,12 +121,10 @@ void UWorldInteractionDetectorComponent::UpdateFocusedTarget()
 			continue;
 		}
 
-		const FVector DirectionToCandidate = (Candidate->GetActorLocation() - OwnerLocation).GetSafeNormal();
-		const float CandidateDot = FVector::DotProduct(OwnerForward, DirectionToCandidate);
-		if (CandidateDot > BestDot)
+		if (HitActor == Candidate)
 		{
-			BestDot = CandidateDot;
 			BestTarget = Candidate;
+			break;
 		}
 	}
 
