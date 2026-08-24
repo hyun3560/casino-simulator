@@ -10,12 +10,15 @@
 #include "casino_simulator.h"
 #include "Widgets/Input/SVirtualJoystick.h"
 #include "UI/casino_simulatorPlayerHUD.h"
+#include "UI/WorldInteractionPromptWidget.h"
 #include "casino_simulatorPlayerState.h"
 #include "casino_simulatorAttributeSet.h"
 #include "casino_simulatorCharacter.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Interaction/WorldInteractionDetectorComponent.h"
+#include "Machine/SeatedMachineBase.h"
 #include "NPC/NPC_Base.h"
 
 Acasino_simulatorPlayerController::Acasino_simulatorPlayerController()
@@ -46,6 +49,20 @@ void Acasino_simulatorPlayerController::BeginPlay()
 
 		}
 
+	}
+
+	if (IsLocalPlayerController() && WorldInteractionPromptWidgetClass)
+	{
+		WorldInteractionPromptWidget = CreateWidget<UWorldInteractionPromptWidget>(this, WorldInteractionPromptWidgetClass);
+		if (WorldInteractionPromptWidget)
+		{
+			WorldInteractionPromptWidget->AddToPlayerScreen(120);
+			WorldInteractionPromptWidget->SetVisibility(ESlateVisibility::Hidden);
+		}
+		else
+		{
+			UE_LOG(Logcasino_simulator, Error, TEXT("Could not spawn world interaction prompt widget."));
+		}
 	}
 
 	// only spawn the player HUD on local player controllers
@@ -254,6 +271,7 @@ void Acasino_simulatorPlayerController::SetInteractionTarget(ANPC_Base* NewInter
 	}
 
 	CurrentInteractionTarget = NewInteractionTarget;
+	CloseWorldInteraction();
 	OpenInteraction();
 }
 
@@ -270,7 +288,7 @@ void Acasino_simulatorPlayerController::ClearInteractionTarget(ANPC_Base* Intera
 
 void Acasino_simulatorPlayerController::InteractWithCurrentTarget()
 {
-	if (!CurrentInteractionTarget || !CurrentInteractionTarget->GetCanInterection() || bInteractionUIOpen)
+	if (bInteractionUIOpen)
 	{
 		return;
 	}
@@ -280,23 +298,56 @@ void Acasino_simulatorPlayerController::InteractWithCurrentTarget()
 	{
 		return;
 	}
-	FVector Location = PlayerCharacter->GetActorLocation();
-	FVector ForwardLocation = PlayerCharacter->GetActorForwardVector() * 1000.f;
-	FVector LineLocation = Location + ForwardLocation;
 
-	FHitResult OutHit;
-	FCollisionQueryParams Params;
-	Params.AddIgnoredActor(PlayerCharacter);
-
-	GetWorld()->LineTraceSingleByChannel(OutHit, Location, LineLocation, ECollisionChannel::ECC_Visibility, Params);
-
-	ANPC_Base* HitNPC = Cast<ANPC_Base>(OutHit.GetActor());
-
-	if (HitNPC)
+	if (ASeatedMachineBase* CurrentMachine = PlayerCharacter->GetCurrentSeatedMachine())
 	{
-		CloseInteraction();
-		CurrentInteractionTarget->Interact(PlayerCharacter);
+		CurrentMachine->HandleMachinePrimaryInput(PlayerCharacter);
+		return;
 	}
+
+	if (CurrentInteractionTarget && CurrentInteractionTarget->GetCanInterection())
+	{
+		FVector Location = PlayerCharacter->GetActorLocation();
+		FVector ForwardLocation = PlayerCharacter->GetActorForwardVector() * 1000.f;
+		FVector LineLocation = Location + ForwardLocation;
+
+		FHitResult OutHit;
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(PlayerCharacter);
+
+		GetWorld()->LineTraceSingleByChannel(OutHit, Location, LineLocation, ECollisionChannel::ECC_Visibility, Params);
+
+		ANPC_Base* HitNPC = Cast<ANPC_Base>(OutHit.GetActor());
+
+		if (HitNPC)
+		{
+			CloseInteraction();
+			CurrentInteractionTarget->Interact(PlayerCharacter);
+			return;
+		}
+	}
+
+	if (UWorldInteractionDetectorComponent* Detector = PlayerCharacter->GetWorldInteractionDetector())
+	{
+		Detector->TryInteract();
+	}
+}
+
+void Acasino_simulatorPlayerController::ExitCurrentMachine()
+{
+	Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(GetPawn());
+	if (!PlayerCharacter)
+	{
+		return;
+	}
+
+	ASeatedMachineBase* CurrentMachine = PlayerCharacter->GetCurrentSeatedMachine();
+	if (!CurrentMachine)
+	{
+		return;
+	}
+
+	CurrentMachine->RequestReleaseMachine(PlayerCharacter);
 }
 
 void Acasino_simulatorPlayerController::SetInteractionPromptSuppressed(bool bSuppressed)
@@ -311,6 +362,7 @@ void Acasino_simulatorPlayerController::SetInteractionPromptSuppressed(bool bSup
 	if (bInteractionPromptSuppressed)
 	{
 		CloseInteraction();
+		CloseWorldInteraction();
 		return;
 	}
 
@@ -437,7 +489,7 @@ void Acasino_simulatorPlayerController::SetLocalPawnMeshesHiddenForInteraction(b
 
 void Acasino_simulatorPlayerController::OpenInteraction()
 {
-	if (bInteractionUIOpen || bInteractionPromptSuppressed || CurrentInteractionTarget->GetCanInterection() == false)
+	if (bInteractionUIOpen || bInteractionPromptSuppressed || !CurrentInteractionTarget || CurrentInteractionTarget->GetCanInterection() == false)
 	{
 		return;
 	}
@@ -457,6 +509,73 @@ void Acasino_simulatorPlayerController::CloseInteraction()
 	{
 		PlayerHUDWidget->BP_CloseInterection();
 	}
+}
+
+bool Acasino_simulatorPlayerController::OpenWorldInteraction(const FText& PromptText)
+{
+	if (bInteractionUIOpen || bInteractionPromptSuppressed || (CurrentInteractionTarget && CurrentInteractionTarget->GetCanInterection()))
+	{
+		return false;
+	}
+
+	if (const Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(GetPawn()))
+	{
+		if (PlayerCharacter->IsUsingSeatedMachine())
+		{
+			return false;
+		}
+	}
+
+	if (!WorldInteractionPromptWidget && WorldInteractionPromptWidgetClass && IsLocalPlayerController())
+	{
+		WorldInteractionPromptWidget = CreateWidget<UWorldInteractionPromptWidget>(this, WorldInteractionPromptWidgetClass);
+		if (WorldInteractionPromptWidget)
+		{
+			WorldInteractionPromptWidget->AddToPlayerScreen(120);
+		}
+	}
+
+	if (!WorldInteractionPromptWidget)
+	{
+		return false;
+	}
+
+	WorldInteractionPromptWidget->BP_SetPromptText(PromptText);
+	WorldInteractionPromptWidget->BP_SetPrimaryPromptVisible(true);
+	WorldInteractionPromptWidget->BP_SetExitPromptVisible(false);
+	WorldInteractionPromptWidget->SetVisibility(ESlateVisibility::Visible);
+	return true;
+}
+
+void Acasino_simulatorPlayerController::CloseWorldInteraction()
+{
+	if (WorldInteractionPromptWidget)
+	{
+		WorldInteractionPromptWidget->SetVisibility(ESlateVisibility::Hidden);
+	}
+}
+
+void Acasino_simulatorPlayerController::SetWorldInteractionPromptControls(bool bPrimaryVisible, bool bExitVisible)
+{
+	if (!WorldInteractionPromptWidget && WorldInteractionPromptWidgetClass && IsLocalPlayerController())
+	{
+		WorldInteractionPromptWidget = CreateWidget<UWorldInteractionPromptWidget>(this, WorldInteractionPromptWidgetClass);
+		if (WorldInteractionPromptWidget)
+		{
+			WorldInteractionPromptWidget->AddToPlayerScreen(120);
+		}
+	}
+
+	if (!WorldInteractionPromptWidget)
+	{
+		return;
+	}
+
+	WorldInteractionPromptWidget->BP_SetPrimaryPromptVisible(bPrimaryVisible);
+	WorldInteractionPromptWidget->BP_SetExitPromptVisible(bExitVisible);
+
+	const bool bShouldShowPrompt = bPrimaryVisible || bExitVisible;
+	WorldInteractionPromptWidget->SetVisibility(bShouldShowPrompt ? ESlateVisibility::Visible : ESlateVisibility::Hidden);
 }
 
 void Acasino_simulatorPlayerController::SetupInputComponent()

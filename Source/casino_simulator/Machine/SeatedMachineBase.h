@@ -1,12 +1,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Actor.h"
+#include "Interaction/WorldInteractableBase.h"
 #include "SeatedMachineBase.generated.h"
 
 class Acasino_simulatorCharacter;
-class USceneComponent;
-class USphereComponent;
+class UCameraComponent;
 class UStaticMeshComponent;
 
 UENUM(BlueprintType)
@@ -23,7 +22,7 @@ enum class ESeatedMachineUseResult : uint8
  * seat/camera points, and the server-authoritative use/release flow.
  */
 UCLASS(Abstract, Blueprintable)
-class CASINO_SIMULATOR_API ASeatedMachineBase : public AActor
+class CASINO_SIMULATOR_API ASeatedMachineBase : public AWorldInteractableBase
 {
 	GENERATED_BODY()
 
@@ -32,21 +31,31 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// ¸Ó½Å »ç¿ë ¿äÃ»
-	UFUNCTION(BlueprintCallable, Category = "Machine|Interaction")
-	void Interact(Acasino_simulatorCharacter* RequestingCharacter);
+	// ï¿½Ó½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½Ã»
+	virtual void Interact(Acasino_simulatorCharacter* RequestingCharacter) override;
 
-	// ÀÌ ¸Ó½Å¿¡¼­ ³ª°¡±â ¿äÃ»
+	// ï¿½ï¿½ ï¿½Ó½Å¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã»
 	UFUNCTION(BlueprintCallable, Category = "Machine|Interaction")
 	void RequestReleaseMachine(Acasino_simulatorCharacter* RequestingCharacter);
 
-	//¸Ó½Å »ç¿ë¿©ºÎ Á¶È¸
+	UFUNCTION(BlueprintCallable, Category = "Machine|Interaction")
+	void HandleMachinePrimaryInput(Acasino_simulatorCharacter* RequestingCharacter);
+
+	UFUNCTION(BlueprintCallable, Category = "Machine|Interaction")
+	void SetCanExitMachine(bool bCanExit);
+
+	UFUNCTION(BlueprintPure, Category = "Machine|Interaction")
+	bool CanExitMachine() const { return bCanExitMachine; }
+
+	//ï¿½Ó½ï¿½ ï¿½ï¿½ë¿©ï¿½ï¿½ ï¿½ï¿½È¸
 	UFUNCTION(BlueprintPure, Category = "Machine|State")
 	bool IsOccupied() const { return CurrentUser != nullptr; }
 
-	// ÇÃ·¹ÀÌ¾î°¡ Áö±Ý Á¶ÀÛ °¡´ÉÇÑÁö È®ÀÎ
+	// ï¿½Ã·ï¿½ï¿½Ì¾î°¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	UFUNCTION(BlueprintPure, Category = "Machine|State")
 	bool CanOperate(Acasino_simulatorCharacter* RequestingCharacter) const;
+
+	virtual bool CanInteract(Acasino_simulatorCharacter* RequestingCharacter) const override;
 
 	UFUNCTION(BlueprintPure, Category = "Machine|State")
 	Acasino_simulatorCharacter* GetCurrentUser() const { return CurrentUser; }
@@ -58,79 +67,102 @@ public:
 	USceneComponent* GetCameraPoint() const { return CameraPoint; }
 
 protected:
-	virtual void BeginPlay() override;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Machine|Components")
-	TObjectPtr<USceneComponent> SceneRoot;
-
-	// °øÅë ÀÇÀÚ ¸Þ½¬
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Þ½ï¿½
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Machine|Components")
 	TObjectPtr<UStaticMeshComponent> ChairMesh;
 
-	// ÇÃ·¹ÀÌ¾î°¡ ¾ÉÀ» À§Ä¡
+	// ï¿½Ã·ï¿½ï¿½Ì¾î°¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Machine|Components")
 	TObjectPtr<USceneComponent> SeatPoint;
 
-	// ¸Ó½Å Á¶ÀÛ ½Ã Ä«¸Þ¶ó À§Ä¡
+	// ï¿½Ó½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ Ä«ï¿½Þ¶ï¿½ ï¿½ï¿½Ä¡
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Machine|Components")
 	TObjectPtr<USceneComponent> CameraPoint;
 
-	// »óÈ£ÀÛ¿ë ¹üÀ§ ÄÄÆ÷³ÍÆ®
+	// Camera used while the player is operating this machine.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Machine|Components")
-	TObjectPtr<USphereComponent> InteractionSphere;
+	TObjectPtr<UCameraComponent> MachineCamera;
 
-	// ÇöÀç ÀÌ ¸Ó½ÅÀ» ¾²´Â ÇÃ·¹ÀÌ¾î
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Machine|Seat")
+	bool bMoveUserToSeatOnUse = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Machine|Seat")
+	bool bDisableUserMovementOnUse = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Machine|Seat", meta = (ClampMin = "0.0"))
+	float MachineCameraBlendTime = 0.35f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Machine|Seat", meta = (ClampMin = "0.0"))
+	float ReleaseCameraBlendTime = 0.25f;
+
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ó½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½
 	UPROPERTY(ReplicatedUsing = OnRep_CurrentUser, BlueprintReadOnly, Category = "Machine|State")
 	TObjectPtr<Acasino_simulatorCharacter> CurrentUser;
 
-	// Á¶ÀÛ °¡´ÉÇÑ »óÅÂÀÎÁö
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Machine|State")
 	bool bCanOperate = false;
 
-	// InteractionSphereÀÇ ¹ÝÁö¸§ °ª
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Machine|Interaction")
-	float InteractionRadius = 150.0f;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Machine|State")
+	bool bCanExitMachine = true;
 
-	//¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤ÑRPC¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ
-	// RPC : Remote Procedure Call - ¸Ö¸® ÀÖ´Â ÄÄÇ»ÅÍ¿¡¼­ ÇÔ¼ö¸¦ ½ÇÇà½ÃÅ°´Â °Í
+	//ï¿½Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤ï¿½RPCï¿½Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤ï¿½
+	// RPC : Remote Procedure Call - ï¿½Ö¸ï¿½ ï¿½Ö´ï¿½ ï¿½ï¿½Ç»ï¿½Í¿ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Å°ï¿½ï¿½ ï¿½ï¿½
 	
-	// Å¬¶óÀÌ¾ðÆ®°¡ ¼­¹ö¿¡°Ô ÇØ´ç ¸Ó½Å »ç¿ë ¿äÃ»ÇÔ¼ö
+	// Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ø´ï¿½ ï¿½Ó½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½Ã»ï¿½Ô¼ï¿½
 	UFUNCTION(Server, Reliable)
 	void Server_RequestUseMachine(Acasino_simulatorCharacter* RequestingCharacter);
 
-	// Å¬¶óÀÌ¾ðÆ®°¡ ¼­¹ö¿¡°Ô ÇØ´ç ¸Ó½Å ³ª°¡±â ¿äÃ» ÇÔ¼ö *ÇöÀç »ç¿ëÀÚ°¡ ¸Â´ÂÁö °Ë»ç
+	// Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ø´ï¿½ ï¿½Ó½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» ï¿½Ô¼ï¿½ *ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ú°ï¿½ ï¿½Â´ï¿½ï¿½ï¿½ ï¿½Ë»ï¿½
 	UFUNCTION(Server, Reliable)
 	void Server_ReleaseMachine(Acasino_simulatorCharacter* RequestingCharacter);
 
-	// ¼­¹ö°¡ Å¬¶óÀÌ¾ðÆ®¿¡°Ô ÇÃ·¹ÀÌ¾îÀÇ ¸Ó½Å »ç¿ë ½ÃÀÛÀ» ¾Ë¸®´Â ÇÔ¼ö
+	UFUNCTION(Server, Reliable)
+	void Server_HandleMachinePrimaryInput(Acasino_simulatorCharacter* RequestingCharacter);
+
+	UFUNCTION(Server, Reliable)
+	void Server_SetCanExitMachine(bool bCanExit);
+
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ï¿½ ï¿½Ó½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¸ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_MachineUseStarted(Acasino_simulatorCharacter* RequestingCharacter);
 
-	// ¼­¹ö°¡ Å¬¶óÀÌ¾ðÆ®¿¡°Ô ÇÃ·¹ÀÌ¾îÀÇ ¸Ó½Å »ç¿ë Á¾·á¸¦ ¾Ë¸®´Â ÇÔ¼ö
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ï¿½ ï¿½Ó½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½á¸¦ ï¿½Ë¸ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_MachineReleased(Acasino_simulatorCharacter* ReleasingCharacter);
-	//¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ
+	//ï¿½Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤Ñ¤ï¿½
 
 	UFUNCTION()
-	void OnRep_CurrentUser(); // OnRep´Â RepNotify ÇÔ¼ö
+	void OnRep_CurrentUser(); // OnRepï¿½ï¿½ RepNotify ï¿½Ô¼ï¿½
 
-	// ¸Ó½Å »ç¿ëÀÌ ½ÂÀÎµÇ¾î Á¶ÀÛ °¡´ÉÇÑ »óÅÂ°¡ µÇ¾úÀ» ¶§ È£Ãâ
+	// ï¿½Ó½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ÎµÇ¾ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â°ï¿½ ï¿½Ç¾ï¿½ï¿½ï¿½ ï¿½ï¿½ È£ï¿½ï¿½
 	UFUNCTION(BlueprintNativeEvent, Category = "Machine|State")
 	void OnMachineReady(Acasino_simulatorCharacter* RequestingCharacter);
 	virtual void OnMachineReady_Implementation(Acasino_simulatorCharacter* RequestingCharacter);
 
 
-	// ÇöÀç »ç¿ëÀÚ°¡ ¸Ó½Å¿¡¼­ ³ª°¬À» ¶§ È£Ãâ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ú°ï¿½ ï¿½Ó½Å¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ È£ï¿½ï¿½
 	UFUNCTION(BlueprintNativeEvent, Category = "Machine|State")
 	void OnMachineReleased(Acasino_simulatorCharacter* ReleasingCharacter);
 	virtual void OnMachineReleased_Implementation(Acasino_simulatorCharacter* ReleasingCharacter);
 
-	// »ç¿ë ¿äÃ»ÀÌ °ÅÀýµÆÀ» ¶§ È£Ãâ
+	// ï¿½ï¿½ï¿½ ï¿½ï¿½Ã»ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ È£ï¿½ï¿½
 	UFUNCTION(BlueprintNativeEvent, Category = "Machine|State")
 	void OnMachineUseRejected(Acasino_simulatorCharacter* RequestingCharacter, ESeatedMachineUseResult Result);
 	virtual void OnMachineUseRejected_Implementation(Acasino_simulatorCharacter* RequestingCharacter, ESeatedMachineUseResult Result);
 
+	UFUNCTION(BlueprintNativeEvent, Category = "Machine|Input")
+	void OnMachinePrimaryInput(Acasino_simulatorCharacter* RequestingCharacter);
+	virtual void OnMachinePrimaryInput_Implementation(Acasino_simulatorCharacter* RequestingCharacter);
+
+	UFUNCTION(BlueprintNativeEvent, Category = "Machine|Interaction")
+	void OnMachineExitRejected(Acasino_simulatorCharacter* RequestingCharacter);
+	virtual void OnMachineExitRejected_Implementation(Acasino_simulatorCharacter* RequestingCharacter);
+
 private:
-	// ¼­¹ö ³»ºÎ¿¡¼­ »ç¿ë °¡´É ¿©ºÎ ÆÇ´Ü
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Î¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ç´ï¿½
 	ESeatedMachineUseResult CanAcceptUser(Acasino_simulatorCharacter* RequestingCharacter) const;
+
+	void EnterMachineUseView(Acasino_simulatorCharacter* RequestingCharacter);
+	void ExitMachineUseView(Acasino_simulatorCharacter* ReleasingCharacter);
 };

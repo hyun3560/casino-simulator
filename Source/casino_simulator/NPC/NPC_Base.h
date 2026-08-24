@@ -14,7 +14,6 @@ class UPrimitiveComponent;
 class Acasino_simulatorCharacter;
 class UAbilitySystemComponent;
 class Ucasino_simulatorAttributeSet;
-class UAnimMontage;
 class UGameplayAbility;
 
 /** Identifies what kind of NPC this is (e.g. which minigame/interaction it hosts). */
@@ -64,18 +63,6 @@ protected:
 	/** Handles for every ability granted so far (startup + runtime), kept so they can be looked up/removed later */
 	UPROPERTY(BlueprintReadOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
 	TArray<FGameplayAbilitySpecHandle> GrantedAbilityHandles;
-
-	/** Played when a minigame this NPC hosts/joins (e.g. the dice game) starts */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation|Game", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UAnimMontage> GameStartMontage;
-
-	/** Played while the minigame is actively being played (e.g. a rolling/dealing loop) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation|Game", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UAnimMontage> GamePlayMontage;
-
-	/** Played once the minigame ends (win/lose/wrap-up reaction) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation|Game", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UAnimMontage> GameEndMontage;
 
 public:
 
