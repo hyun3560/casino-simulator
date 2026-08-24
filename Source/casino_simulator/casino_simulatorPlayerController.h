@@ -12,6 +12,8 @@ class Ucasino_simulatorPlayerHUD;
 class UWorldInteractionPromptWidget;
 class UAbilitySystemComponent;
 class ANPC_Base;
+class ASeatedMachineBase;
+class AWorldInteractableBase;
 struct FOnAttributeChangeData;
 
 /**
@@ -159,6 +161,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Machine|Interaction")
 	void ExitCurrentMachine();
 
+	void RequestWorldInteraction(AWorldInteractableBase* Target);
+
 	UFUNCTION(BlueprintCallable, Category="Interaction")
 	bool OpenWorldInteraction(const FText& PromptText);
 
@@ -186,4 +190,14 @@ public:
 	void OpenInteraction();
 
 	void CloseInteraction();
+
+protected:
+	UFUNCTION(Server, Reliable)
+	void Server_RequestWorldInteraction(AWorldInteractableBase* Target);
+
+	UFUNCTION(Server, Reliable)
+	void Server_HandleMachinePrimaryInput(ASeatedMachineBase* Machine);
+
+	UFUNCTION(Server, Reliable)
+	void Server_ExitMachine(ASeatedMachineBase* Machine);
 };

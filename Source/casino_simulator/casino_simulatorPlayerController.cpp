@@ -18,6 +18,7 @@
 #include "AbilitySystemInterface.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Interaction/WorldInteractionDetectorComponent.h"
+#include "Interaction/WorldInteractableBase.h"
 #include "Machine/SeatedMachineBase.h"
 #include "NPC/NPC_Base.h"
 
@@ -301,7 +302,14 @@ void Acasino_simulatorPlayerController::InteractWithCurrentTarget()
 
 	if (ASeatedMachineBase* CurrentMachine = PlayerCharacter->GetCurrentSeatedMachine())
 	{
-		CurrentMachine->HandleMachinePrimaryInput(PlayerCharacter);
+		if (HasAuthority())
+		{
+			CurrentMachine->HandleMachinePrimaryInput(PlayerCharacter);
+		}
+		else
+		{
+			Server_HandleMachinePrimaryInput(CurrentMachine);
+		}
 		return;
 	}
 
@@ -347,7 +355,67 @@ void Acasino_simulatorPlayerController::ExitCurrentMachine()
 		return;
 	}
 
-	CurrentMachine->RequestReleaseMachine(PlayerCharacter);
+	if (HasAuthority())
+	{
+		CurrentMachine->RequestReleaseMachine(PlayerCharacter);
+	}
+	else
+	{
+		Server_ExitMachine(CurrentMachine);
+	}
+}
+
+void Acasino_simulatorPlayerController::RequestWorldInteraction(AWorldInteractableBase* Target)
+{
+	Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(GetPawn());
+	if (!PlayerCharacter || !Target || !Target->CanInteract(PlayerCharacter))
+	{
+		return;
+	}
+
+	CloseWorldInteraction();
+
+	if (HasAuthority())
+	{
+		Target->Interact(PlayerCharacter);
+	}
+	else
+	{
+		Server_RequestWorldInteraction(Target);
+	}
+}
+
+void Acasino_simulatorPlayerController::Server_RequestWorldInteraction_Implementation(AWorldInteractableBase* Target)
+{
+	Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(GetPawn());
+	if (!PlayerCharacter || !Target || !Target->CanInteract(PlayerCharacter))
+	{
+		return;
+	}
+
+	Target->Interact(PlayerCharacter);
+}
+
+void Acasino_simulatorPlayerController::Server_HandleMachinePrimaryInput_Implementation(ASeatedMachineBase* Machine)
+{
+	Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(GetPawn());
+	if (!PlayerCharacter || !Machine || PlayerCharacter->GetCurrentSeatedMachine() != Machine)
+	{
+		return;
+	}
+
+	Machine->HandleMachinePrimaryInput(PlayerCharacter);
+}
+
+void Acasino_simulatorPlayerController::Server_ExitMachine_Implementation(ASeatedMachineBase* Machine)
+{
+	Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(GetPawn());
+	if (!PlayerCharacter || !Machine || PlayerCharacter->GetCurrentSeatedMachine() != Machine)
+	{
+		return;
+	}
+
+	Machine->RequestReleaseMachine(PlayerCharacter);
 }
 
 void Acasino_simulatorPlayerController::SetInteractionPromptSuppressed(bool bSuppressed)
