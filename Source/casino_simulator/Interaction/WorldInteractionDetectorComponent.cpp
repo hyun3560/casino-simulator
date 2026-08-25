@@ -71,8 +71,11 @@ bool UWorldInteractionDetectorComponent::TryInteract()
 		return false;
 	}
 
-	CloseWorldPrompt();
-	FocusedTarget->Interact(OwnerCharacter);
+	if (Acasino_simulatorPlayerController* PlayerController = Cast<Acasino_simulatorPlayerController>(OwnerCharacter->GetController()))
+	{
+		PlayerController->RequestWorldInteraction(FocusedTarget);
+	}
+
 	return true;
 }
 
