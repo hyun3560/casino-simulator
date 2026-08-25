@@ -33,6 +33,9 @@ public:
 	// 주행 중? true 되는 순간이 각 클라의 "출발 신호".
 	UPROPERTY(ReplicatedUsing = OnRep_Racing, BlueprintReadOnly, Category = "Race")
 	bool bRacing = false;
+	// 각 러너의 달리기 상태
+	UPROPERTY(BlueprintReadOnly, Category = "Race")
+	bool  bIsRunning = false;
 
 	// ── 서버 전용 세팅 함수 ──
 	void InitStats(const FRaceRunnerStats& In);
@@ -41,7 +44,6 @@ public:
 
 	// 매니저(서버)가 승자 판정에 참고
 	float GetPosUnits() const { return PosUnits; }
-	bool  HasFinished() const { return bFinishedLocal; }
 
 	// BP 연출 훅
 	UFUNCTION(BlueprintImplementableEvent, Category = "Race") void OnStatsUpdated();
@@ -64,5 +66,5 @@ protected:
 	bool  bAwakenedLocal = false;
 	bool  bStumbledLocal = false;
 	float StumbleUntil = 0.f;
-	bool  bFinishedLocal = false;
+	
 };

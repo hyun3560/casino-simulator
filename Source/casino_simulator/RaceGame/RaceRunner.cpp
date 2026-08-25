@@ -51,7 +51,7 @@ void ARaceRunner::ResetVisual()
 	bAwakenedLocal = false;
 	bStumbledLocal = false;
 	StumbleUntil = 0.f;
-	bFinishedLocal = false;
+	bIsRunning = false;
 }
 
 void ARaceRunner::OnRep_Racing()
@@ -61,6 +61,7 @@ void ARaceRunner::OnRep_Racing()
 	{
 		ResetVisual();
 		SetActorLocation(RaceScript.StartLoc);
+		bIsRunning = true;
 	}
 }
 
@@ -69,7 +70,7 @@ void ARaceRunner::OnRep_Stats() { OnStatsUpdated(); }
 void ARaceRunner::Tick(float Dt)
 {
 	Super::Tick(Dt);
-	if (!bRacing || bFinishedLocal) return;
+	if (!bIsRunning) return;
 
 	LocalTime += Dt;
 
@@ -91,7 +92,7 @@ void ARaceRunner::Tick(float Dt)
 	if (LocalTime < StumbleUntil) Mult *= 0.3f;
 
 	PosUnits += RaceScript.Speed * Mult * Dt;
-	if (PosUnits >= RaceScript.TrackLength) { PosUnits = RaceScript.TrackLength; bFinishedLocal = true; }
+	if (PosUnits >= RaceScript.TrackLength) { PosUnits = RaceScript.TrackLength; bIsRunning = false; }
 
 	SetActorLocation(RaceScript.StartLoc + RaceScript.Dir * PosUnits);
 }

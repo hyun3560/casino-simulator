@@ -34,13 +34,15 @@ public:
 	// ↓ SpawnPoints 없을 때만 쓰는 폴백 값들
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Track") FVector StartLocation = FVector::ZeroVector;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Track") FVector RaceDirection = FVector(1, 0, 0);
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Track") float   TrackLength = 3000.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Track") float   TrackLength = 2700.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Track") float   LaneSpacing = 200.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Odds")  float   HouseMargin = 0.15f;
 
 	UPROPERTY(ReplicatedUsing = OnRep_Phase, BlueprintReadOnly, Category = "Race") ERacePhase Phase = ERacePhase::Idle;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Race")                     int32 WinnerIndex = -1;
+	// 완주 순위: FinishOrder[0]=1등, [1]=2등 ... (러너 인덱스). 서버가 확정, 복제.
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Race") TArray<int32> FinishOrder;
 
 	UPROPERTY(BlueprintAssignable, Category = "Race") FOnRaceLineupReady OnLineupReady;
 	UPROPERTY(BlueprintAssignable, Category = "Race") FOnRaceStarted     OnRaceStarted;
