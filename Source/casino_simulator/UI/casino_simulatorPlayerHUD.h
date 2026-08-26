@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Item/InventoryEntry.h"
 #include "casino_simulatorPlayerHUD.generated.h"
 
 /**
@@ -41,4 +42,7 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "HUD", meta = (DisplayName = "Close Interection"))
 	void BP_CloseInterection();
 
+	/** Passes the full current inventory to Blueprint whenever PlayerState's inventory changes, so item slot widgets (e.g. WBP_ItemSlot) can be rebuilt/refreshed. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "HUD", meta = (DisplayName = "Inventory Updated"))
+	void BP_InventoryUpdated(const TArray<FInventoryEntry>& Inventory);
 };

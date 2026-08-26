@@ -7,6 +7,7 @@
 #include "casino_simulatorPlayerController.generated.h"
 
 class UInputMappingContext;
+class UInputAction;
 class UUserWidget;
 class Ucasino_simulatorPlayerHUD;
 class UWorldInteractionPromptWidget;
@@ -40,6 +41,18 @@ protected:
 	/** Input Mapping Contexts */
 	UPROPERTY(EditAnywhere, Category="Input|Input Mappings")
 	TArray<UInputMappingContext*> MobileExcludedMappingContexts;
+
+	/** Input Action bound to the "I" key (toggles the inventory UI) */
+	UPROPERTY(EditAnywhere, Category="Input|Input Actions")
+	TObjectPtr<UInputAction> ToggleInventoryAction;
+
+	/** Inventory widget class to spawn (e.g. WBP_Inventory) */
+	UPROPERTY(EditAnywhere, Category="Inventory")
+	TSubclassOf<UUserWidget> InventoryWidgetClass;
+
+	/** Pointer to the spawned inventory widget, created lazily the first time it's toggled on */
+	UPROPERTY()
+	TObjectPtr<UUserWidget> InventoryWidget;
 
 	/** Mobile controls widget to spawn */
 	UPROPERTY(EditAnywhere, Category="Input|Touch Controls")
@@ -148,7 +161,18 @@ protected:
 	/** Hides/restores only this local player's pawn meshes while an interaction camera is active. */
 	void SetLocalPawnMeshesHiddenForInteraction(bool bShouldHide);
 
+	/** Bound to ToggleInventoryAction; toggles the inventory widget on/off */
+	void ToggleInventoryInput();
+
 public:
+
+	/** Shows the inventory widget if hidden, hides it if shown. Spawns it from InventoryWidgetClass on first use. */
+	UFUNCTION(BlueprintCallable, Category="Inventory")
+	void ToggleInventory();
+
+	UFUNCTION(BlueprintPure, Category="Inventory")
+	bool IsInventoryOpen() const;
+
 	UFUNCTION(BlueprintCallable, Category="Interaction")
 	void SetInteractionTarget(ANPC_Base* NewInteractionTarget);
 

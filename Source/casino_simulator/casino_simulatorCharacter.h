@@ -49,6 +49,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	UInputAction* InteractAction;
 
+	/** Slot 1 Input Action (quick-use item in PlayerState's NumberSlots[0]) */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	UInputAction* Slot1Action;
+
+	/** Slot 2 Input Action (quick-use item in PlayerState's NumberSlots[1]) */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	UInputAction* Slot2Action;
+
 	/** Machine Exit Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	UInputAction* MachineExitAction;
@@ -92,7 +100,7 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
 	FActiveGameplayEffectHandle AttributeDecayEffectHandle;
 
-	UPROPERTY(Transient, BlueprintReadOnly, Category = "Machine|Interaction", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(Transient, BlueprintReadOnly, Category="Machine|Interaction", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<ASeatedMachineBase> CurrentSeatedMachine;
 
 	/** Walking speed at full Nicotine (ratio = 1). CharacterMovementComponent's MaxWalkSpeed is scaled from this as Nicotine depletes. */
@@ -129,10 +137,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Economy|Currency")
 	float GetCurrency() const;
 
-	UFUNCTION(BlueprintPure, Category = "Machine|Interaction")
+	UFUNCTION(BlueprintPure, Category="Machine|Interaction")
 	ASeatedMachineBase* GetCurrentSeatedMachine() const { return CurrentSeatedMachine; }
 
-	UFUNCTION(BlueprintPure, Category = "Machine|Interaction")
+	UFUNCTION(BlueprintPure, Category="Machine|Interaction")
 	bool IsUsingSeatedMachine() const { return CurrentSeatedMachine != nullptr; }
 
 	void SetCurrentSeatedMachine(ASeatedMachineBase* NewMachine);
@@ -174,6 +182,12 @@ protected:
 
 	/** Called from Input Actions for interaction input */
 	void InteractInput(const FInputActionValue& Value);
+
+	/** Called from Input Actions for slot 1 input */
+	void Slot1Input(const FInputActionValue& Value);
+
+	/** Called from Input Actions for slot 2 input */
+	void Slot2Input(const FInputActionValue& Value);
 
 	void MachineExitInput();
 

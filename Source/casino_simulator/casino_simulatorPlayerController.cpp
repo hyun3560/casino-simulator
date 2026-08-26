@@ -3,8 +3,10 @@
 
 #include "casino_simulatorPlayerController.h"
 #include "EnhancedInputSubsystems.h"
+#include "EnhancedInputComponent.h"
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
+#include "InputAction.h"
 #include "casino_simulatorCameraManager.h"
 #include "Blueprint/UserWidget.h"
 #include "casino_simulator.h"
@@ -176,6 +178,9 @@ void Acasino_simulatorPlayerController::RefreshInventorySlotCounts()
 		PlayerHUDWidget->BP_Slot_1Count(0);
 		PlayerHUDWidget->BP_Slot_2Count(0);
 	}
+
+	// Also push the full inventory so Blueprint can rebuild/refresh dynamic item slot widgets (e.g. WBP_ItemSlot).
+	PlayerHUDWidget->BP_InventoryUpdated(BoundPlayerState ? BoundPlayerState->GetInventory() : TArray<FInventoryEntry>());
 }
 
 void Acasino_simulatorPlayerController::HandlePossessedPawnChanged(APawn* PreviousPawn, APawn* NewPawn)
@@ -557,7 +562,7 @@ void Acasino_simulatorPlayerController::SetLocalPawnMeshesHiddenForInteraction(b
 
 void Acasino_simulatorPlayerController::OpenInteraction()
 {
-	if (bInteractionUIOpen || bInteractionPromptSuppressed || !CurrentInteractionTarget || CurrentInteractionTarget->GetCanInterection() == false)
+	if (!CurrentInteractionTarget || bInteractionUIOpen || bInteractionPromptSuppressed || !CurrentInteractionTarget->GetCanInterection())
 	{
 		return;
 	}
@@ -671,7 +676,58 @@ void Acasino_simulatorPlayerController::SetupInputComponent()
 			}
 		}
 	}
-	
+
+	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
+	{
+		if (ToggleInventoryAction)
+		{
+			EnhancedInputComponent->BindAction(ToggleInventoryAction, ETriggerEvent::Started, this, &Acasino_simulatorPlayerController::ToggleInventoryInput);
+		}
+	}
+}
+
+void Acasino_simulatorPlayerController::ToggleInventoryInput()
+{
+	ToggleInventory();
+}
+
+void Acasino_simulatorPlayerController::ToggleInventory()
+{
+	if (!InventoryWidgetClass)
+	{
+		UE_LOG(Logcasino_simulator, Warning, TEXT("'%s' has no InventoryWidgetClass set - cannot toggle inventory."), *GetNameSafe(this));
+		return;
+	}
+
+	if (!InventoryWidget)
+	{
+		InventoryWidget = CreateWidget<UUserWidget>(this, InventoryWidgetClass);
+		if (InventoryWidget)
+		{
+			InventoryWidget->AddToViewport();
+			SetShowMouseCursor(InventoryWidget->GetVisibility() == ESlateVisibility::SelfHitTestInvisible);
+			return;
+		}
+	}
+
+	if (!InventoryWidget)
+	{
+		return;
+	}
+
+	if (InventoryWidget->GetVisibility() == ESlateVisibility::Collapsed)
+	{
+		InventoryWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	}
+	else
+	{
+		InventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	SetShowMouseCursor(InventoryWidget->GetVisibility() == ESlateVisibility::SelfHitTestInvisible);
+}
+bool Acasino_simulatorPlayerController::IsInventoryOpen() const
+{
+	return InventoryWidget && InventoryWidget->IsInViewport();
 }
 
 bool Acasino_simulatorPlayerController::ShouldUseTouchControls() const
