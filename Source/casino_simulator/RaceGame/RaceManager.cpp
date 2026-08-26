@@ -42,6 +42,7 @@ void ARaceManager::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ARaceManager, Phase);
 	DOREPLIFETIME(ARaceManager, WinnerIndex);
+	DOREPLIFETIME(ARaceManager, FinishOrder);
 }
 
 void ARaceManager::BeginPlay()
@@ -89,6 +90,7 @@ void ARaceManager::StartNewRound()
 	for (ARaceRunner* R : Runners) { if (R) R->Destroy(); }
 	Runners.Reset();
 	WinnerIndex = -1;
+	FinishOrder.Reset();
 	RaceElapsed = 0.f;
 	RaceDuration = 0.f;
 	bResultBroadcast = false;
@@ -141,8 +143,8 @@ void ARaceManager::StartRace()
 {
 	if (!HasAuthority() || Phase != ERacePhase::Betting) return;
 
-	float BestTime = 1.0e9f, MaxTime = 0.f;
-	int32 Best = -1;
+	float MaxTime = 0.f;
+	TArray<TPair<int32, float>> Times;   // {러너 인덱스, 완주 시각}
 
 	for (int32 i = 0; i < Runners.Num(); ++i)
 	{
@@ -153,13 +155,18 @@ void ARaceManager::StartRace()
 		const FRunnerRaceScript Script = RollScript(Rn->Stats, Rn->GetActorLocation(), Rn->GetActorForwardVector());
 		Rn->ServerSetupScript(Script);
 
-		// 승자 판정: 레시피로 완주 시각 결정론 계산
+		// 완주 시각 결정론 계산 → 순위 판정용
 		const float FinishT = SimulateFinishTime(Script);
-		if (FinishT < BestTime) { BestTime = FinishT; Best = i; }
+		Times.Add({ i, FinishT });
 		MaxTime = FMath::Max(MaxTime, FinishT);
 	}
 
-	WinnerIndex = Best;                 // 결과 확정 (복제됨) — 결승 전에 이미 정해짐
+	// 완주 시각 오름차순 = 완주 순위
+	Times.Sort([](const TPair<int32, float>& A, const TPair<int32, float>& B) { return A.Value < B.Value; });
+	FinishOrder.Reset();
+	for (const TPair<int32, float>& T : Times) FinishOrder.Add(T.Key);
+
+	WinnerIndex = FinishOrder.Num() > 0 ? FinishOrder[0] : -1;   // 1등 (복제됨) — 결승 전에 이미 정해짐
 	RaceDuration = MaxTime + 0.3f;      // 전원 완주 시간 + 버퍼
 	RaceElapsed = 0.f;
 	bResultBroadcast = false;
@@ -193,6 +200,7 @@ void ARaceManager::ResetRace()
 	if (!HasAuthority()) return;
 	Phase = ERacePhase::Idle;
 	WinnerIndex = -1;
+	FinishOrder.Reset();
 	bResultBroadcast = false;
 	for (ARaceRunner* R : Runners) { if (R) R->ServerSetRacing(false); }
 	OnRep_Phase();
