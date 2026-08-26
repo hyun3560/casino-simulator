@@ -4,6 +4,8 @@
 #include "CoreMinimal.h"
 #include "RaceTypes.generated.h"
 
+class APlayerState;
+
 UENUM(BlueprintType)
 enum class ERacePhase : uint8
 {
@@ -42,4 +44,27 @@ struct FRunnerRaceScript
 	UPROPERTY() float   AwakenAtPos = 0.f;      // 이 위치 지나면 각성
 	UPROPERTY() bool    bWillStumble = false;
 	UPROPERTY() float   StumbleAtPos = 0.f;     // 이 위치 지나면 삐끗
+};
+
+// 마권 1장(묶음). 매니저가 원장으로 보유. 구매 시점 배당(Odds) 고정.
+USTRUCT(BlueprintType)
+struct FBetTicket
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Bet") int32 TicketId = 0;
+	// 누가 (폰 리스폰돼도 유지되게 PlayerState 기준)
+	UPROPERTY(BlueprintReadOnly, Category = "Bet") TObjectPtr<APlayerState> Buyer = nullptr;
+	UPROPERTY(BlueprintReadOnly, Category = "Bet") FString BuyerName;
+	// 어느 러너에
+	UPROPERTY(BlueprintReadOnly, Category = "Bet") int32 RunnerIndex = -1;
+	UPROPERTY(BlueprintReadOnly, Category = "Bet") FString RunnerName;
+	// 장당 배팅액 / 개수 / 구매시점 배당
+	UPROPERTY(BlueprintReadOnly, Category = "Bet") int32 Amount = 0;
+	UPROPERTY(BlueprintReadOnly, Category = "Bet") int32 Count = 1;
+	UPROPERTY(BlueprintReadOnly, Category = "Bet") float Odds = 1.f;
+	// 정산 결과 (true=당첨, 환전 대기)
+	UPROPERTY(BlueprintReadOnly, Category = "Bet") bool bWon = false;
+
+	int32 Payout() const { return FMath::FloorToInt(Amount * Count * Odds); }
 };

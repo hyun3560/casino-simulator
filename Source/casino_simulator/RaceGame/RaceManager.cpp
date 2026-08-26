@@ -3,6 +3,8 @@
 #include "RaceRunner.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
+#include "casino_simulatorCharacter.h"
+#include "GameFramework/PlayerState.h"
 
 static const TCHAR* KRNames[] = {
 	TEXT("김춘수"), TEXT("박막례"), TEXT("이순자"), TEXT("최봉팔"),
@@ -36,9 +38,17 @@ ARaceManager::ARaceManager()
 	PrimaryActorTick.bCanEverTick = true;
 	bReplicates = true;
 
-	Track = CreateDefaultSubobject<UStaticMeshComponent>("Track");
-	NPCSpawnPoints = CreateDefaultSubobject<USceneComponent>("NPCSpawnPoints");
-	NPCSpawnPoints->SetupAttachment(Track);
+	// 빈 씬을 루트로
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot);
+
+	// Track을 루트에 부착
+	Track = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Track"));
+	Track->SetupAttachment(SceneRoot);
+
+	// NPC 스폰 포인트는 루트에 부착 → Track 스케일 영향 안 받음
+	NPCSpawnPoints = CreateDefaultSubobject<USceneComponent>(TEXT("NPCSpawnPoints"));
+	NPCSpawnPoints->SetupAttachment(SceneRoot);
 
 }
 
@@ -48,16 +58,31 @@ void ARaceManager::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ARaceManager, Phase);
 	DOREPLIFETIME(ARaceManager, WinnerIndex);
 	DOREPLIFETIME(ARaceManager, FinishOrder);
+	DOREPLIFETIME(ARaceManager, Tickets);
 }
 
 void ARaceManager::BeginPlay()
 {
 	Super::BeginPlay();
-	FActorSpawnParameters Params;
-	Params.Owner = this;
-	RaceNPC = GetWorld()->SpawnActor<ANPC_Base>(NPCClass, NPCSpawnPoints->GetComponentTransform(), Params);
+	// NPC는 서버에서만 스폰 (복제 액터 → 클라엔 자동으로 복제됨). 클라가 또 스폰하면 2개가 됨.
+	if (HasAuthority())
+	{
+		if (NPCClass && NPCSpawnPoints)
+		{
+			FActorSpawnParameters Params;
+			Params.Owner = this;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	if (HasAuthority()) StartNewRound();
+			FTransform SpawnTM = NPCSpawnPoints->GetComponentTransform();
+			SpawnTM.SetScale3D(FVector::OneVector);   // 스케일 항상 1
+
+			RaceNPC = GetWorld()->SpawnActor<ANPC_InteractionCameraBase>(NPCClass, SpawnTM, Params);
+			if (!RaceNPC)
+				UE_LOG(LogTemp, Warning, TEXT("[RaceManager] NPC 스폰 실패 - 클래스/위치 확인"));
+		}
+
+		StartNewRound();
+	}
 }
 
 FRaceRunnerStats ARaceManager::RollStats(int32 LaneIndex) const
@@ -200,7 +225,7 @@ void ARaceManager::Tick(float Dt)
 		OnRep_Phase();
 		OnRaceFinished.Broadcast(GetWinner(), WinnerIndex);
 
-		// TODO(정산): PlayerState 순회 → 우승마(GetWinner())에 건 플레이어에게 bet * Odds 지급
+		SettleTickets();   // 단승: 진 마권 자동삭제, 당첨 마권 유지(환전 대기)
 	}
 }
 
@@ -223,4 +248,79 @@ ARaceRunner* ARaceManager::GetWinner() const
 void ARaceManager::OnRep_Phase()
 {
 	// 클라: 페이즈 바뀔 때 UI 전환 등 (BP에서 OnRep 후크로 처리)
+}
+
+// ───────────────────────── 마권 ─────────────────────────
+
+bool ARaceManager::ServerBuyTicket(Acasino_simulatorCharacter* Player, int32 RunnerIndex, int32 Amount, int32 Count)
+{
+	if (!HasAuthority() || !Player) return false;
+	if (Phase != ERacePhase::Betting) return false;                 // 배팅 페이즈에만 구매
+	if (!Runners.IsValidIndex(RunnerIndex) || !Runners[RunnerIndex]) return false;
+	if (Amount <= 0 || Count <= 0) return false;
+
+	const int32 Total = Amount * Count;
+	if (!Player->TrySpendCurrency(static_cast<float>(Total))) return false;   // 잔액 부족 → 실패
+
+	APlayerState* PS = Player->GetPlayerState();
+
+	FBetTicket T;
+	T.TicketId    = NextTicketId++;
+	T.Buyer       = PS;
+	T.BuyerName   = PS ? PS->GetPlayerName() : TEXT("?");
+	T.RunnerIndex = RunnerIndex;
+	T.RunnerName  = Runners[RunnerIndex]->Stats.Name;
+	T.Amount      = Amount;
+	T.Count       = Count;
+	T.Odds        = Runners[RunnerIndex]->Stats.Odds;               // 구매 시점 배당 고정
+	Tickets.Add(T);
+	return true;
+}
+
+void ARaceManager::SettleTickets()
+{
+	if (!HasAuthority()) return;
+	// 단승: WinnerIndex 맞춘 마권만 당첨 → 유지, 나머진 삭제.
+	// 이미 bWon인 건 지난 라운드 당첨분(환전 대기) → 건드리지 않음.
+	for (int32 i = Tickets.Num() - 1; i >= 0; --i)
+	{
+		if (Tickets[i].bWon) continue;
+		if (Tickets[i].RunnerIndex == WinnerIndex)
+			Tickets[i].bWon = true;
+		else
+			Tickets.RemoveAt(i);
+	}
+}
+
+int32 ARaceManager::ServerClaimWinnings(Acasino_simulatorCharacter* Player)
+{
+	if (!HasAuthority() || !Player) return 0;
+	APlayerState* PS = Player->GetPlayerState();
+	if (!PS) return 0;
+
+	int32 TotalPaid = 0;
+	for (int32 i = Tickets.Num() - 1; i >= 0; --i)
+	{
+		if (Tickets[i].bWon && Tickets[i].Buyer == PS)
+		{
+			const int32 Pay = Tickets[i].Payout();
+			Player->AddCurrency(static_cast<float>(Pay));
+			TotalPaid += Pay;
+			Tickets.RemoveAt(i);                    // 환전 완료 → 제거
+		}
+	}
+	return TotalPaid;
+}
+
+TArray<FBetTicket> ARaceManager::GetTicketsForPlayer(APlayerState* PS) const
+{
+	TArray<FBetTicket> Out;
+	for (const FBetTicket& T : Tickets)
+		if (T.Buyer == PS) Out.Add(T);
+	return Out;
+}
+
+float ARaceManager::GetOdds(int32 RunnerIndex) const
+{
+	return (Runners.IsValidIndex(RunnerIndex) && Runners[RunnerIndex]) ? Runners[RunnerIndex]->Stats.Odds : 0.f;
 }

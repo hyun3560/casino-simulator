@@ -20,6 +20,7 @@ class UWorldInteractionDetectorComponent;
 class UGameplayEffect;
 class ASeatedMachineBase;
 struct FInputActionValue;
+class ARaceManager;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
 
@@ -136,6 +137,13 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Economy|Currency")
 	float GetCurrency() const;
+
+	// ── 마권 (돈이라 서버 검증 필수). UI에서 소유 캐릭터에 호출 → 서버에서 매니저로 전달 ──
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Race|Bet")
+	void ServerBuyRaceTicket(ARaceManager* Manager, int32 RunnerIndex, int32 Amount, int32 Count);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Race|Bet")
+	void ServerClaimRaceWinnings(ARaceManager* Manager);
 
 	UFUNCTION(BlueprintPure, Category="Machine|Interaction")
 	ASeatedMachineBase* GetCurrentSeatedMachine() const { return CurrentSeatedMachine; }
