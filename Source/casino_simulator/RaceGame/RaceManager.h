@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "RaceTypes.h"
+#include "NPC/NPC_Base.h"
+#include "Components/SceneComponent.h"
 #include "RaceManager.generated.h"
 
 class ARaceRunner;
@@ -23,21 +25,28 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race") TSubclassOf<ARaceRunner> RunnerClass;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race") int32 NumRunners = 5;
 
+	UPROPERTY(EditAnywhere, Category = "Race|Track") UStaticMeshComponent* Track;
 	// 레벨에 배치한 스폰 지점들. 순서대로 러너 스폰 (0번 지점 = 0번 러너).
 	// 비어있으면 아래 StartLocation/LaneSpacing로 자동 계산(폴백).
-	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Race|Track") TArray<AActor*> SpawnPoints;
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Race|Track") TArray<AActor*> RunnerSpawnPoints;
+	
 
-	// ↓ SpawnPoints 없을 때만 쓰는 폴백 값들
+	// ↓ RunnerSpawnPoints 없을 때만 쓰는 폴백 값들
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Track") FVector StartLocation = FVector::ZeroVector;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Track") FVector RaceDirection = FVector(1, 0, 0);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Track") float   TrackLength = 2700.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Track") float   LaneSpacing = 200.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|Odds")  float   HouseMargin = 0.15f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC") TSubclassOf<ANPC_Base> NPCClass;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Race|NPC")  ANPC_Base* RaceNPC;
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Race|NPC") USceneComponent* NPCSpawnPoints;
+
+	
 
 	UPROPERTY(ReplicatedUsing = OnRep_Phase, BlueprintReadOnly, Category = "Race") ERacePhase Phase = ERacePhase::Idle;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Race")                     int32 WinnerIndex = -1;

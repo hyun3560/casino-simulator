@@ -35,6 +35,11 @@ ARaceManager::ARaceManager()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	bReplicates = true;
+
+	Track = CreateDefaultSubobject<UStaticMeshComponent>("Track");
+	NPCSpawnPoints = CreateDefaultSubobject<USceneComponent>("NPCSpawnPoints");
+	NPCSpawnPoints->SetupAttachment(Track);
+
 }
 
 void ARaceManager::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -48,6 +53,10 @@ void ARaceManager::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 void ARaceManager::BeginPlay()
 {
 	Super::BeginPlay();
+	FActorSpawnParameters Params;
+	Params.Owner = this;
+	RaceNPC = GetWorld()->SpawnActor<ANPC_Base>(NPCClass, NPCSpawnPoints->GetComponentTransform(), Params);
+
 	if (HasAuthority()) StartNewRound();
 }
 
@@ -101,8 +110,8 @@ void ARaceManager::StartNewRound()
 		return;
 	}
 
-	const bool bUseSpawnPoints = SpawnPoints.Num() > 0;
-	const int32 Count = bUseSpawnPoints ? SpawnPoints.Num() : NumRunners;
+	const bool bUseSpawnPoints = RunnerSpawnPoints.Num() > 0;
+	const int32 Count = bUseSpawnPoints ? RunnerSpawnPoints.Num() : NumRunners;
 
 	const FVector DirN = RaceDirection.GetSafeNormal();
 	const FVector Side = FVector::CrossProduct(DirN, FVector::UpVector).GetSafeNormal();
@@ -116,9 +125,9 @@ void ARaceManager::StartNewRound()
 		FRotator Rot;
 		if (bUseSpawnPoints)
 		{
-			if (!SpawnPoints[i]) continue;                    // 순서대로: i번 지점 = i번 러너
-			Loc = SpawnPoints[i]->GetActorLocation();
-			Rot = SpawnPoints[i]->GetActorRotation();
+			if (!RunnerSpawnPoints[i]) continue;                    // 순서대로: i번 지점 = i번 러너
+			Loc = RunnerSpawnPoints[i]->GetActorLocation();
+			Rot = RunnerSpawnPoints[i]->GetActorRotation();
 		}
 		else
 		{
