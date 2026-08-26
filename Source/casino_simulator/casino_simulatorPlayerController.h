@@ -7,13 +7,11 @@
 #include "casino_simulatorPlayerController.generated.h"
 
 class UInputMappingContext;
+class UInputAction;
 class UUserWidget;
 class Ucasino_simulatorPlayerHUD;
-class UWorldInteractionPromptWidget;
 class UAbilitySystemComponent;
 class ANPC_Base;
-class ASeatedMachineBase;
-class AWorldInteractableBase;
 struct FOnAttributeChangeData;
 
 /**
@@ -41,6 +39,18 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input|Input Mappings")
 	TArray<UInputMappingContext*> MobileExcludedMappingContexts;
 
+	/** Input Action bound to the "I" key (toggles the inventory UI) */
+	UPROPERTY(EditAnywhere, Category="Input|Input Actions")
+	TObjectPtr<UInputAction> ToggleInventoryAction;
+
+	/** Inventory widget class to spawn (e.g. WBP_Inventory) */
+	UPROPERTY(EditAnywhere, Category="Inventory")
+	TSubclassOf<UUserWidget> InventoryWidgetClass;
+
+	/** Pointer to the spawned inventory widget, created lazily the first time it's toggled on */
+	UPROPERTY()
+	TObjectPtr<UUserWidget> InventoryWidget;
+
 	/** Mobile controls widget to spawn */
 	UPROPERTY(EditAnywhere, Category="Input|Touch Controls")
 	TSubclassOf<UUserWidget> MobileControlsWidgetClass;
@@ -60,12 +70,6 @@ protected:
 	/** Pointer to the spawned player HUD widget */
 	UPROPERTY()
 	TObjectPtr<Ucasino_simulatorPlayerHUD> PlayerHUDWidget;
-
-	UPROPERTY(EditAnywhere, Category="HUD")
-	TSubclassOf<UWorldInteractionPromptWidget> WorldInteractionPromptWidgetClass;
-
-	UPROPERTY()
-	TObjectPtr<UWorldInteractionPromptWidget> WorldInteractionPromptWidget;
 
 	/** Ability system component we're currently listening to for attribute changes, so we can unbind cleanly when the pawn changes */
 	UPROPERTY()
@@ -148,7 +152,18 @@ protected:
 	/** Hides/restores only this local player's pawn meshes while an interaction camera is active. */
 	void SetLocalPawnMeshesHiddenForInteraction(bool bShouldHide);
 
+	/** Bound to ToggleInventoryAction; toggles the inventory widget on/off */
+	void ToggleInventoryInput();
+
 public:
+
+	/** Shows the inventory widget if hidden, hides it if shown. Spawns it from InventoryWidgetClass on first use. */
+	UFUNCTION(BlueprintCallable, Category="Inventory")
+	void ToggleInventory();
+
+	UFUNCTION(BlueprintPure, Category="Inventory")
+	bool IsInventoryOpen() const;
+
 	UFUNCTION(BlueprintCallable, Category="Interaction")
 	void SetInteractionTarget(ANPC_Base* NewInteractionTarget);
 
@@ -157,20 +172,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Interaction")
 	void InteractWithCurrentTarget();
-
-	UFUNCTION(BlueprintCallable, Category="Machine|Interaction")
-	void ExitCurrentMachine();
-
-	void RequestWorldInteraction(AWorldInteractableBase* Target);
-
-	UFUNCTION(BlueprintCallable, Category="Interaction")
-	bool OpenWorldInteraction(const FText& PromptText);
-
-	UFUNCTION(BlueprintCallable, Category="Interaction")
-	void CloseWorldInteraction();
-
-	UFUNCTION(BlueprintCallable, Category="Interaction")
-	void SetWorldInteractionPromptControls(bool bPrimaryVisible, bool bExitVisible);
 
 	UFUNCTION(BlueprintPure, Category="Interaction")
 	bool IsInteractionUIOpen() const { return bInteractionUIOpen; }
@@ -190,14 +191,4 @@ public:
 	void OpenInteraction();
 
 	void CloseInteraction();
-
-protected:
-	UFUNCTION(Server, Reliable)
-	void Server_RequestWorldInteraction(AWorldInteractableBase* Target);
-
-	UFUNCTION(Server, Reliable)
-	void Server_HandleMachinePrimaryInput(ASeatedMachineBase* Machine);
-
-	UFUNCTION(Server, Reliable)
-	void Server_ExitMachine(ASeatedMachineBase* Machine);
 };

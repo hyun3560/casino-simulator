@@ -16,9 +16,7 @@ class UInputAction;
 class UAbilitySystemComponent;
 class Ucasino_simulatorAttributeSet;
 class UCasinoShopComponent;
-class UWorldInteractionDetectorComponent;
 class UGameplayEffect;
-class ASeatedMachineBase;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -49,9 +47,13 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	UInputAction* InteractAction;
 
-	/** Machine Exit Input Action */
+	/** Slot 1 Input Action (quick-use item in PlayerState's NumberSlots[0]) */
 	UPROPERTY(EditAnywhere, Category ="Input")
-	UInputAction* MachineExitAction;
+	UInputAction* Slot1Action;
+
+	/** Slot 2 Input Action (quick-use item in PlayerState's NumberSlots[1]) */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	UInputAction* Slot2Action;
 
 	/** Move Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
@@ -81,9 +83,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Shop", meta = (AllowPrivateAccess = "true"))
 	UCasinoShopComponent* ShopComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Interaction", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UWorldInteractionDetectorComponent> WorldInteractionDetector;
-
 	/** Infinite periodic GameplayEffect (typically a Blueprint) that decays Nicotine/Alcohol over time. Applied once, server-side. */
 	UPROPERTY(EditDefaultsOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UGameplayEffect> AttributeDecayEffectClass;
@@ -91,9 +90,6 @@ protected:
 	/** Handle to the active decay effect, kept so it can be removed/reapplied later (e.g. to pause decay) */
 	UPROPERTY(BlueprintReadOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
 	FActiveGameplayEffectHandle AttributeDecayEffectHandle;
-
-	UPROPERTY(Transient, BlueprintReadOnly, Category = "Machine|Interaction", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<ASeatedMachineBase> CurrentSeatedMachine;
 
 	/** Walking speed at full Nicotine (ratio = 1). CharacterMovementComponent's MaxWalkSpeed is scaled from this as Nicotine depletes. */
 	UPROPERTY(EditAnywhere, Category="Abilities", meta = (AllowPrivateAccess = "true"))
@@ -117,9 +113,6 @@ public:
 	UFUNCTION(BlueprintPure, Category="Shop")
 	UCasinoShopComponent* GetShopComponent() const { return ShopComponent; }
 
-	UFUNCTION(BlueprintPure, Category="Interaction")
-	UWorldInteractionDetectorComponent* GetWorldInteractionDetector() const { return WorldInteractionDetector; }
-
 	UFUNCTION(BlueprintCallable, Category = "Economy|Currency")
 	bool TrySpendCurrency(float Amount);
 
@@ -128,15 +121,6 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Economy|Currency")
 	float GetCurrency() const;
-
-	UFUNCTION(BlueprintPure, Category = "Machine|Interaction")
-	ASeatedMachineBase* GetCurrentSeatedMachine() const { return CurrentSeatedMachine; }
-
-	UFUNCTION(BlueprintPure, Category = "Machine|Interaction")
-	bool IsUsingSeatedMachine() const { return CurrentSeatedMachine != nullptr; }
-
-	void SetCurrentSeatedMachine(ASeatedMachineBase* NewMachine);
-	void ClearCurrentSeatedMachine(ASeatedMachineBase* MachineToClear);
 
 protected:
 
@@ -175,7 +159,11 @@ protected:
 	/** Called from Input Actions for interaction input */
 	void InteractInput(const FInputActionValue& Value);
 
-	void MachineExitInput();
+	/** Called from Input Actions for slot 1 input */
+	void Slot1Input(const FInputActionValue& Value);
+
+	/** Called from Input Actions for slot 2 input */
+	void Slot2Input(const FInputActionValue& Value);
 
 	/** Handles aim inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")

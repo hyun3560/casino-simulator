@@ -36,7 +36,7 @@ void ULadderWidget::SetMachine(ALadderMachine* InMachine)
 	TraceProgress = 0.0f;
 
 	// BP에서 머신 dispatcher 바인딩 + 초기 UI 구성할 수 있게 알림.
-	OnMachineAttached();
+	OnMachineReady();
 }
 
 void ULadderWidget::NativeDestruct()
@@ -93,15 +93,19 @@ void ULadderWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 		return;
 	}
 
-	// 트레이스 길이는 머신 값과 공유(서버 정산 타이머와 동기화). 없으면 위젯 기본값.
-	const float Dur = (Machine && Machine->TraceDuration > 0.0f) ? Machine->TraceDuration : TraceDuration;
-	TraceProgress += (Dur > 0.0f) ? (InDeltaTime / Dur) : 1.0f;
+	TraceProgress += (TraceDuration > 0.0f) ? (InDeltaTime / TraceDuration) : 1.0f;
 
 	if (TraceProgress >= 1.0f)
 	{
 		TraceProgress = 1.0f;
 		bTracing = false;
-		// 결과창/정산은 전부 서버가 담당(Multicast_Result). 뷰는 구슬을 바닥에 세워둘 뿐.
+
+		// 결과창 표시/최종잔액 방송은 머신이 담당 (View는 "연출 끝났다"만 알림).
+		// 돈 정산은 머신 Play에서 이미 끝나 있음.
+		if (Machine)
+		{
+			Machine->RevealFinished();
+		}
 	}
 }
 

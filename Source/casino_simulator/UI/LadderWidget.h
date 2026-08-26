@@ -70,7 +70,7 @@ public:
 	 *  (여기서 OnCursorChanged/OnRailCountChanged/OnBetChanged/OnResultsChanged 등을 바인딩하고,
 	 *   마지막에 Machine.BroadcastInitialState() 를 부르면 초기 버튼/텍스트가 채워짐.) */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Ladder")
-	void OnMachineAttached();
+	void OnMachineReady();
 
 	// ─────────── 좌표 헬퍼 (BP 버튼/결과칸 배치용, 위젯 로컬 좌표/앵커) ───────────
 	UFUNCTION(BlueprintCallable, Category = "Ladder")
