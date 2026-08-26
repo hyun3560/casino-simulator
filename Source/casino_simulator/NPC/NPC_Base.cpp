@@ -93,6 +93,15 @@ FGameplayAbilitySpecHandle ANPC_Base::GrantAbility(TSubclassOf<UGameplayAbility>
 void ANPC_Base::SetCanInterection(bool value)
 {
 	CanInterection = value;
+
+	if (value)
+	{
+		Acasino_simulatorPlayerController* PC = Cast<Acasino_simulatorPlayerController>(OverlappingPlayer->GetController());
+		if (PC)
+		{
+			PC->OpenInteraction();
+		}
+	}
 }
 
 void ANPC_Base::Interact(Acasino_simulatorCharacter* InteractingCharacter)
@@ -110,6 +119,8 @@ void ANPC_Base::OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedC
 	// Only the player character (Acasino_simulatorCharacter) opens the interaction - other NPCs/objects overlapping the sphere are ignored.
 	if (Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(OtherActor))
 	{
+		OverlappingPlayer = PlayerCharacter;
+
 		if (Acasino_simulatorPlayerController* PlayerController = Cast<Acasino_simulatorPlayerController>(PlayerCharacter->GetController()))
 		{
 			PlayerController->SetInteractionTarget(this);
@@ -121,6 +132,11 @@ void ANPC_Base::OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedCom
 {
 	if (Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(OtherActor))
 	{
+		if (OverlappingPlayer == PlayerCharacter)
+		{
+			OverlappingPlayer = nullptr;
+		}
+
 		if (Acasino_simulatorPlayerController* PlayerController = Cast<Acasino_simulatorPlayerController>(PlayerCharacter->GetController()))
 		{
 			PlayerController->ClearInteractionTarget(this);

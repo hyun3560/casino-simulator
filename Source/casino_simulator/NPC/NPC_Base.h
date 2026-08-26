@@ -64,6 +64,10 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="Abilities", meta = (AllowPrivateAccess = "true"))
 	TArray<FGameplayAbilitySpecHandle> GrantedAbilityHandles;
 
+	/** Player character currently overlapping the interaction sphere (null when none is). Set/cleared in OnInteractionSphereBeginOverlap/EndOverlap. */
+	UPROPERTY(BlueprintReadOnly, Category="Interaction", meta = (AllowPrivateAccess = "true"))
+	Acasino_simulatorCharacter* OverlappingPlayer = nullptr;
+
 public:
 
 	ANPC_Base();
@@ -94,6 +98,10 @@ public:
 	/** Grants a single ability to this NPC's ASC. Server-only (no-ops on clients); returns an invalid handle if it couldn't be granted. */
 	UFUNCTION(BlueprintCallable, Category="Abilities")
 	FGameplayAbilitySpecHandle GrantAbility(TSubclassOf<UGameplayAbility> AbilityClass, int32 Level = 1);
+
+	/** Returns the player character currently overlapping the interaction sphere, or null if none is. */
+	UFUNCTION(BlueprintPure, Category="Interaction")
+	Acasino_simulatorCharacter* GetOverlappingPlayer() const { return OverlappingPlayer; }
 
 protected:
 

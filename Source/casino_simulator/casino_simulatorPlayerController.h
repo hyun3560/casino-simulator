@@ -211,8 +211,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Interaction")
 	void ExitInteractionUIMode(float BlendTime = 0.25f);
 
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
 	void OpenInteraction();
-
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
 	void CloseInteraction();
 
 protected:
