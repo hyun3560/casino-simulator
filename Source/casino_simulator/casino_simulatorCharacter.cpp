@@ -13,6 +13,7 @@
 #include "Interaction/WorldInteractionDetectorComponent.h"
 #include "Machine/SeatedMachineBase.h"
 #include "casino_simulatorPlayerController.h"
+#include "RaceGame/RaceManager.h"
 #include "casino_simulatorPlayerState.h"
 #include "casino_simulatorAttributeSet.h"
 #include "Item/ItemData.h"
@@ -457,4 +458,14 @@ void Acasino_simulatorCharacter::DoJumpEnd()
 {
 	// pass StopJumping to the character
 	StopJumping();
+}
+
+void Acasino_simulatorCharacter::ServerBuyRaceTicket_Implementation(ARaceManager* Manager, int32 RunnerIndex, int32 Amount, int32 Count)
+{
+	if (Manager) Manager->ServerBuyTicket(this, RunnerIndex, Amount, Count);
+}
+
+void Acasino_simulatorCharacter::ServerClaimRaceWinnings_Implementation(ARaceManager* Manager)
+{
+	if (Manager) Manager->ServerClaimWinnings(this);
 }
