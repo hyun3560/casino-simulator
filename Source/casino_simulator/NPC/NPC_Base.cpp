@@ -94,7 +94,7 @@ void ANPC_Base::SetCanInterection(bool value)
 {
 	CanInterection = value;
 
-	if (value)
+	if (value && OverlappingPlayer)
 	{
 		Acasino_simulatorPlayerController* PC = Cast<Acasino_simulatorPlayerController>(OverlappingPlayer->GetController());
 		if (PC)

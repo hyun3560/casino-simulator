@@ -22,6 +22,7 @@
 #include "Interaction/WorldInteractionDetectorComponent.h"
 #include "Interaction/WorldInteractableBase.h"
 #include "Machine/SeatedMachineBase.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "NPC/NPC_Base.h"
 
 Acasino_simulatorPlayerController::Acasino_simulatorPlayerController()
@@ -336,6 +337,10 @@ void Acasino_simulatorPlayerController::InteractWithCurrentTarget()
 		{
 			CloseInteraction();
 			CurrentInteractionTarget->Interact(PlayerCharacter);
+			if (UCharacterMovementComponent* MovementComponent = PlayerCharacter->GetCharacterMovement())
+			{
+				MovementComponent->DisableMovement();
+			}
 			return;
 		}
 	}
