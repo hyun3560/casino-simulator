@@ -10,6 +10,8 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "AbilitySystemComponent.h"
 #include "Economy/CasinoShopComponent.h"
+#include "Interaction/WorldInteractionDetectorComponent.h"
+#include "Machine/SeatedMachineBase.h"
 #include "casino_simulatorPlayerController.h"
 #include "casino_simulatorPlayerState.h"
 #include "casino_simulatorAttributeSet.h"
@@ -60,6 +62,7 @@ Acasino_simulatorCharacter::Acasino_simulatorCharacter()
 	AttributeSet = CreateDefaultSubobject<Ucasino_simulatorAttributeSet>(TEXT("AttributeSet"));
 
 	ShopComponent = CreateDefaultSubobject<UCasinoShopComponent>(TEXT("ShopComponent"));
+	WorldInteractionDetector = CreateDefaultSubobject<UWorldInteractionDetectorComponent>(TEXT("WorldInteractionDetector"));
 }
 
 UAbilitySystemComponent* Acasino_simulatorCharacter::GetAbilitySystemComponent() const
@@ -119,6 +122,19 @@ float Acasino_simulatorCharacter::GetCurrency() const
 	return AbilitySystemComponent->GetNumericAttribute(
 		Ucasino_simulatorAttributeSet::GetCurrencyAttribute()
 	);
+}
+
+void Acasino_simulatorCharacter::SetCurrentSeatedMachine(ASeatedMachineBase* NewMachine)
+{
+	CurrentSeatedMachine = NewMachine;
+}
+
+void Acasino_simulatorCharacter::ClearCurrentSeatedMachine(ASeatedMachineBase* MachineToClear)
+{
+	if (!MachineToClear || CurrentSeatedMachine == MachineToClear)
+	{
+		CurrentSeatedMachine = nullptr;
+	}
 }
 
 void Acasino_simulatorCharacter::PossessedBy(AController* NewController)
@@ -281,6 +297,11 @@ void Acasino_simulatorCharacter::SetupPlayerInputComponent(UInputComponent* Play
 			EnhancedInputComponent->BindAction(Slot2Action, ETriggerEvent::Started, this, &Acasino_simulatorCharacter::Slot2Input);
 		}
 
+		if (MachineExitAction)
+		{
+			EnhancedInputComponent->BindAction(MachineExitAction, ETriggerEvent::Started, this, &Acasino_simulatorCharacter::MachineExitInput);
+		}
+
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &Acasino_simulatorCharacter::MoveInput);
 
@@ -396,6 +417,14 @@ void Acasino_simulatorCharacter::Slot1Input(const FInputActionValue& Value)
 void Acasino_simulatorCharacter::Slot2Input(const FInputActionValue& Value)
 {
 	// TODO: quick-use the item in PlayerState's NumberSlots[1] once that use-item flow exists.
+}
+
+void Acasino_simulatorCharacter::MachineExitInput()
+{
+	if (Acasino_simulatorPlayerController* PC = Cast<Acasino_simulatorPlayerController>(GetController()))
+	{
+		PC->ExitCurrentMachine();
+	}
 }
 
 void Acasino_simulatorCharacter::DoAim(float Yaw, float Pitch)

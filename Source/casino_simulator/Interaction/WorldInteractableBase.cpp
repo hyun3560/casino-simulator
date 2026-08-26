@@ -2,6 +2,7 @@
 
 #include "Components/SceneComponent.h"
 #include "Components/SphereComponent.h"
+#include "Interaction/WorldInteractionDetectorComponent.h"
 #include "casino_simulatorCharacter.h"
 
 AWorldInteractableBase::AWorldInteractableBase()
@@ -59,10 +60,13 @@ void AWorldInteractableBase::OnInteractionSphereBeginOverlap(
 	bool bFromSweep,
 	const FHitResult& SweepResult)
 {
-	// Candidate registration used to go through UWorldInteractionDetectorComponent, which was
-	// removed when world interaction moved to the controller's line-trace flow (see
-	// Acasino_simulatorPlayerController::InteractWithCurrentTarget). Left as a hook for
-	// subclasses/Blueprints until machine interaction is wired into that flow.
+	if (Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(OtherActor))
+	{
+		if (UWorldInteractionDetectorComponent* Detector = PlayerCharacter->GetWorldInteractionDetector())
+		{
+			Detector->RegisterCandidate(this);
+		}
+	}
 }
 
 void AWorldInteractableBase::OnInteractionSphereEndOverlap(
@@ -71,5 +75,11 @@ void AWorldInteractableBase::OnInteractionSphereEndOverlap(
 	UPrimitiveComponent* OtherComp,
 	int32 OtherBodyIndex)
 {
-	// See OnInteractionSphereBeginOverlap.
+	if (Acasino_simulatorCharacter* PlayerCharacter = Cast<Acasino_simulatorCharacter>(OtherActor))
+	{
+		if (UWorldInteractionDetectorComponent* Detector = PlayerCharacter->GetWorldInteractionDetector())
+		{
+			Detector->UnregisterCandidate(this);
+		}
+	}
 }
